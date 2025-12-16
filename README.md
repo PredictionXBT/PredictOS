@@ -81,7 +81,7 @@ A key feature driving adoption is the ability to **stake $PREDICT for attractive
 
 | Feature | Description |
 |---------|-------------|
-| **Agent Battles** | Pit AI agents against each other to discover winning strategies |
+| **Agent Battles (x402)** | Pit AI agents against each other to discover winning strategies |
 | **Betting Bots** | Automated trading bots with customizable strategies |
 | **No Code Builder** | Build trading strategies without writing code |
 | **Whale Tracking** | Monitor and follow large traders across markets |
