@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="terminal/public/logo.jpg" alt="PredictOS Logo" width="120" height="120" style="border-radius: 50%;" />
+  <img src="terminal/public/logo.jpg" alt="PredictOS Logo" width="180" height="180" style="border-radius: 50%;" />
 
   <h1>PredictOS</h1>
 
