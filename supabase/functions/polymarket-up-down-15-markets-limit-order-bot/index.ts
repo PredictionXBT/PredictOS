@@ -1,6 +1,6 @@
 /**
  * Supabase Edge Function: polymarket-up-down-15-markets-limit-order-bot
- * 
+ *
  * Automated limit order bot for Polymarket 15-minute up/down markets.
  * Places straddle orders on the closest upcoming market.
  */
@@ -16,11 +16,19 @@ import type {
   LimitOrderBotRequest,
   LimitOrderBotResponse,
   MarketOrderResult,
+  LadderConfig,
+  LadderRung,
+  LadderRungResult,
 } from "./types.ts";
 
 // Trading configuration defaults
 const DEFAULT_ORDER_PRICE = 0.48; // 48%
 const DEFAULT_ORDER_SIZE_USD = 25; // $25 total
+
+// Ladder betting defaults
+const DEFAULT_LADDER_MAX_PRICE = 49;
+const DEFAULT_LADDER_MIN_PRICE = 35;
+const DEFAULT_LADDER_TAPER_FACTOR = 1.5;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,7 +97,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { asset, price, sizeUsd } = requestBody;
+    const { asset, price, sizeUsd, ladder } = requestBody;
 
     // Validate asset
     if (!asset || !isValidAsset(asset)) {
@@ -105,10 +113,30 @@ Deno.serve(async (req: Request) => {
     }
 
     const normalizedAsset = asset.toUpperCase() as SupportedAsset;
-    
+
+    // Determine if ladder mode is enabled
+    const ladderMode = ladder?.enabled ?? false;
+
     // Get order configuration from request
     const orderPrice = price ? price / 100 : DEFAULT_ORDER_PRICE;
     const orderSizeUsd = sizeUsd || DEFAULT_ORDER_SIZE_USD;
+
+    // Get ladder configuration (with defaults)
+    const ladderConfig: LadderConfig = {
+      enabled: ladderMode,
+      maxPrice: ladder?.maxPrice ?? DEFAULT_LADDER_MAX_PRICE,
+      minPrice: ladder?.minPrice ?? DEFAULT_LADDER_MIN_PRICE,
+      taperFactor: ladder?.taperFactor ?? DEFAULT_LADDER_TAPER_FACTOR,
+    };
+
+    if (ladderMode) {
+      logs.push(createLogEntry("INFO", `Ladder mode enabled`, {
+        maxPrice: `${ladderConfig.maxPrice}%`,
+        minPrice: `${ladderConfig.minPrice}%`,
+        taperFactor: ladderConfig.taperFactor,
+        totalBankroll: `$${orderSizeUsd}`,
+      }));
+    }
 
     // Get the closest upcoming 15-minute market timestamp
     const timestamp = getNext15MinTimestamp();
@@ -164,7 +192,7 @@ Deno.serve(async (req: Request) => {
             targetTimestamp: timestamp,
             error: `Token extraction failed: ${errorMsg}`,
           };
-          
+
           return new Response(
             JSON.stringify({
               success: false,
@@ -173,6 +201,7 @@ Deno.serve(async (req: Request) => {
                 asset: normalizedAsset,
                 pricePercent: orderPrice * 100,
                 sizeUsd: orderSizeUsd,
+                ladderMode,
                 market: marketResult,
               },
               logs,
@@ -181,18 +210,50 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        // Place straddle orders
-        const orderResults = await client.placeStraddleOrders(tokenIds, orderPrice, orderSizeUsd);
-        logs.push(...client.getLogs());
-        client.clearLogs();
+        // Place orders based on mode
+        if (ladderMode) {
+          // Ladder mode: place orders at multiple price levels
+          const ladderResults = await client.placeLadderOrders(
+            tokenIds,
+            orderSizeUsd,
+            ladderConfig.maxPrice!,
+            ladderConfig.minPrice!,
+            ladderConfig.taperFactor!
+          );
+          logs.push(...client.getLogs());
+          client.clearLogs();
 
-        marketResult = {
-          marketSlug,
-          marketTitle: market.title,
-          marketStartTime: formatTimeShort(timestamp),
-          targetTimestamp: timestamp,
-          ordersPlaced: orderResults,
-        };
+          // Convert ladder results to LadderRungResult format
+          const ladderOrdersPlaced: LadderRungResult[] = ladderResults.results.map(r => ({
+            pricePercent: r.pricePercent,
+            sizeUsd: r.sizeUsd,
+            up: r.up,
+            down: r.down,
+          }));
+
+          marketResult = {
+            marketSlug,
+            marketTitle: market.title,
+            marketStartTime: formatTimeShort(timestamp),
+            targetTimestamp: timestamp,
+            ladderOrdersPlaced,
+            ladderTotalOrders: ladderResults.totalOrders,
+            ladderSuccessfulOrders: ladderResults.successfulOrders,
+          };
+        } else {
+          // Simple mode: single straddle order
+          const orderResults = await client.placeStraddleOrders(tokenIds, orderPrice, orderSizeUsd);
+          logs.push(...client.getLogs());
+          client.clearLogs();
+
+          marketResult = {
+            marketSlug,
+            marketTitle: market.title,
+            marketStartTime: formatTimeShort(timestamp),
+            targetTimestamp: timestamp,
+            ordersPlaced: orderResults,
+          };
+        }
       }
 
     } catch (error) {
@@ -206,12 +267,27 @@ Deno.serve(async (req: Request) => {
       };
     }
 
+    // Build ladder rungs for response if in ladder mode
+    let ladderRungs: LadderRung[] | undefined;
+    if (ladderMode) {
+      ladderRungs = client.calculateLadderRungs(
+        orderSizeUsd,
+        ladderConfig.maxPrice!,
+        ladderConfig.minPrice!,
+        ladderConfig.taperFactor!
+      );
+      client.clearLogs(); // Clear the calculation logs (we already have them)
+    }
+
     const response: LimitOrderBotResponse = {
       success: !marketResult.error,
       data: {
         asset: normalizedAsset,
         pricePercent: orderPrice * 100,
         sizeUsd: orderSizeUsd,
+        ladderMode,
+        ladderConfig: ladderMode ? ladderConfig : undefined,
+        ladderRungs: ladderMode ? ladderRungs : undefined,
         market: marketResult,
       },
       logs,
@@ -225,7 +301,7 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     logs.push(createLogEntry("ERROR", `Unhandled error: ${errorMsg}`));
-    
+
     return new Response(
       JSON.stringify({
         success: false,

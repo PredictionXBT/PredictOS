@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Play, Square, ChevronDown, Bot, Percent, DollarSign, AlertTriangle, Loader2 } from "lucide-react";
-import type { SupportedAsset, BotLogEntry, LimitOrderBotResponse } from "@/types/betting-bot";
+import { Play, Square, ChevronDown, Bot, Percent, DollarSign, AlertTriangle, Loader2, Layers, TrendingDown } from "lucide-react";
+import type { SupportedAsset, BotLogEntry, LimitOrderBotResponse, LadderConfig } from "@/types/betting-bot";
+import PositionDashboard from "./PositionDashboard";
 
 const ASSETS: { value: SupportedAsset; label: string; icon: string }[] = [
   { value: "BTC", label: "Bitcoin (BTC)", icon: "₿" },
@@ -19,7 +20,90 @@ const PRICE_OPTIONS = [
   { value: 49, label: "49%" },
 ];
 
+// Ladder price range options
+const LADDER_MAX_PRICE_OPTIONS = [
+  { value: 49, label: "49%" },
+  { value: 48, label: "48%" },
+  { value: 47, label: "47%" },
+];
+
+const LADDER_MIN_PRICE_OPTIONS = [
+  { value: 35, label: "35% (Recommended)" },
+  { value: 38, label: "38%" },
+  { value: 40, label: "40%" },
+  { value: 42, label: "42%" },
+];
+
+const TAPER_FACTOR_OPTIONS = [
+  { value: 1.0, label: "1.0 (Gentle)" },
+  { value: 1.5, label: "1.5 (Moderate)" },
+  { value: 2.0, label: "2.0 (Aggressive)" },
+  { value: 2.5, label: "2.5 (Very Heavy Top)" },
+];
+
 const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Calculate ladder rungs preview (matches backend logic)
+ * Ensures minimum allocation per rung to guarantee 5+ shares at any price level
+ */
+function calculateLadderRungs(
+  totalBankroll: number,
+  maxPrice: number,
+  minPrice: number,
+  taperFactor: number
+): Array<{ pricePercent: number; sizeUsd: number; allocationPercent: number }> {
+  // Calculate minimum USD needed for 5 shares at the highest price level
+  const MIN_SHARES = 5;
+  const MIN_RUNG_USD = Math.ceil(MIN_SHARES * (maxPrice / 100) * 100) / 100;
+
+  // Generate all potential price levels
+  const allPriceLevels: number[] = [];
+  for (let p = maxPrice; p >= minPrice; p--) {
+    allPriceLevels.push(p);
+  }
+
+  // Find how many rungs we can afford with minimum allocation
+  let priceLevels = [...allPriceLevels];
+  let numRungs = priceLevels.length;
+
+  while (numRungs > 1) {
+    const rawWeights: number[] = [];
+    for (let i = 0; i < numRungs; i++) {
+      rawWeights.push(Math.exp(-taperFactor * i / numRungs));
+    }
+    const totalWeight = rawWeights.reduce((sum, w) => sum + w, 0);
+    const normalizedWeights = rawWeights.map(w => w / totalWeight);
+    const smallestAllocation = totalBankroll * normalizedWeights[numRungs - 1];
+
+    if (smallestAllocation >= MIN_RUNG_USD) {
+      break;
+    }
+    numRungs--;
+    priceLevels = allPriceLevels.slice(0, numRungs);
+  }
+
+  // Calculate final allocations
+  const rungs: Array<{ pricePercent: number; sizeUsd: number; allocationPercent: number }> = [];
+  const rawWeights: number[] = [];
+  for (let i = 0; i < numRungs; i++) {
+    rawWeights.push(Math.exp(-taperFactor * i / numRungs));
+  }
+  const totalWeight = rawWeights.reduce((sum, w) => sum + w, 0);
+  const normalizedWeights = rawWeights.map(w => w / totalWeight);
+
+  for (let i = 0; i < numRungs; i++) {
+    const allocationPercent = normalizedWeights[i] * 100;
+    const sizeUsd = totalBankroll * normalizedWeights[i];
+    rungs.push({
+      pricePercent: priceLevels[i],
+      sizeUsd: Math.round(sizeUsd * 100) / 100,
+      allocationPercent: Math.round(allocationPercent * 100) / 100,
+    });
+  }
+
+  return rungs;
+}
 
 /**
  * Get the next 15-minute market timestamp (rounds up to the next 15-min block)
@@ -57,7 +141,24 @@ const BettingBotTerminal = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const priceDropdownRef = useRef<HTMLDivElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Ladder mode state
+  const [ladderEnabled, setLadderEnabled] = useState(false);
+  const [ladderMaxPrice, setLadderMaxPrice] = useState(49);
+  const [ladderMinPrice, setLadderMinPrice] = useState(35);
+  const [taperFactor, setTaperFactor] = useState(1.5);
+  const [isMaxPriceDropdownOpen, setIsMaxPriceDropdownOpen] = useState(false);
+  const [isMinPriceDropdownOpen, setIsMinPriceDropdownOpen] = useState(false);
+  const [isTaperDropdownOpen, setIsTaperDropdownOpen] = useState(false);
+  const maxPriceDropdownRef = useRef<HTMLDivElement>(null);
+  const minPriceDropdownRef = useRef<HTMLDivElement>(null);
+  const taperDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Calculate ladder preview
+  const ladderRungs = ladderEnabled
+    ? calculateLadderRungs(orderSize, ladderMaxPrice, ladderMinPrice, taperFactor)
+    : [];
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -67,6 +168,15 @@ const BettingBotTerminal = () => {
       }
       if (priceDropdownRef.current && !priceDropdownRef.current.contains(event.target as Node)) {
         setIsPriceDropdownOpen(false);
+      }
+      if (maxPriceDropdownRef.current && !maxPriceDropdownRef.current.contains(event.target as Node)) {
+        setIsMaxPriceDropdownOpen(false);
+      }
+      if (minPriceDropdownRef.current && !minPriceDropdownRef.current.contains(event.target as Node)) {
+        setIsMinPriceDropdownOpen(false);
+      }
+      if (taperDropdownRef.current && !taperDropdownRef.current.contains(event.target as Node)) {
+        setIsTaperDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -103,14 +213,31 @@ const BettingBotTerminal = () => {
     setError(null);
 
     try {
+      const requestBody: {
+        asset: SupportedAsset;
+        price?: number;
+        sizeUsd: number;
+        ladder?: LadderConfig;
+      } = {
+        asset: selectedAsset,
+        sizeUsd: orderSize,
+      };
+
+      if (ladderEnabled) {
+        requestBody.ladder = {
+          enabled: true,
+          maxPrice: ladderMaxPrice,
+          minPrice: ladderMinPrice,
+          taperFactor: taperFactor,
+        };
+      } else {
+        requestBody.price = selectedPrice;
+      }
+
       const response = await fetch("/api/limit-order-bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          asset: selectedAsset,
-          price: selectedPrice,
-          sizeUsd: orderSize,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data: LimitOrderBotResponse = await response.json();
@@ -140,7 +267,20 @@ const BettingBotTerminal = () => {
         
         if (market.error) {
           addLog("ERROR", `${asset} Market ${startTimeStr} -- ${endTimeStr}: ${polymarketUrl} — Failed: ${market.error}`);
+        } else if (data.data?.ladderMode && market.ladderOrdersPlaced) {
+          // Ladder mode logging
+          const successCount = market.ladderSuccessfulOrders || 0;
+          const totalCount = market.ladderTotalOrders || 0;
+          addLog("SUCCESS", `${asset} LADDER ${startTimeStr} -- ${endTimeStr}: ${polymarketUrl}`);
+          addLog("INFO", `Ladder: ${successCount}/${totalCount} orders placed across ${market.ladderOrdersPlaced.length} price levels ($${sizeUsd} total)`);
+          // Log individual rungs
+          for (const rung of market.ladderOrdersPlaced) {
+            const upStatus = rung.up?.success ? "✓" : "✗";
+            const downStatus = rung.down?.success ? "✓" : "✗";
+            addLog("INFO", `  ${rung.pricePercent}%: Up ${upStatus} Down ${downStatus} ($${rung.sizeUsd.toFixed(2)})`);
+          }
         } else {
+          // Simple mode logging
           const upStatus = market.ordersPlaced?.up?.success ? "✓" : "✗";
           const downStatus = market.ordersPlaced?.down?.success ? "✓" : "✗";
           addLog("SUCCESS", `${asset} Market ${startTimeStr} -- ${endTimeStr}: ${polymarketUrl} Up: ${upStatus} Down: ${downStatus} $${sizeUsd}`);
@@ -159,13 +299,17 @@ const BettingBotTerminal = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [selectedAsset, selectedPrice, orderSize, addLog]);
+  }, [selectedAsset, selectedPrice, orderSize, ladderEnabled, ladderMaxPrice, ladderMinPrice, taperFactor, addLog]);
 
   // Start the bot with polling
   const startBot = useCallback(() => {
     setIsBotRunning(true);
     setError(null);
-    addLog("INFO", `Bot started — ${selectedAsset} at ${selectedPrice}% with $${orderSize} total`);
+    if (ladderEnabled) {
+      addLog("INFO", `Bot started — ${selectedAsset} LADDER MODE (${ladderMaxPrice}% → ${ladderMinPrice}%) with $${orderSize} total bankroll`);
+    } else {
+      addLog("INFO", `Bot started — ${selectedAsset} at ${selectedPrice}% with $${orderSize} total`);
+    }
     
     // Submit immediately
     submitOrder();
@@ -174,7 +318,7 @@ const BettingBotTerminal = () => {
     pollIntervalRef.current = setInterval(() => {
       submitOrder();
     }, POLL_INTERVAL_MS);
-  }, [selectedAsset, selectedPrice, orderSize, addLog, submitOrder]);
+  }, [selectedAsset, selectedPrice, orderSize, ladderEnabled, ladderMaxPrice, ladderMinPrice, addLog, submitOrder]);
 
   // Stop the bot
   const stopBot = useCallback(() => {
@@ -244,21 +388,56 @@ const BettingBotTerminal = () => {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary">2.</span>
-                <span>Set your order price (48% recommended for straddle) and total USD amount per side -- note that total shares cannot be below 5 on Polymarket, hence the minimum order size is $3.</span>
+                <span>Choose <strong>Simple</strong> mode (single price) or <strong>Ladder</strong> mode (multiple price levels with tapered allocation)</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary">3.</span>
-                <span>Click "Start Bot" to begin — the bot will place limit orders on the next market immediately</span>
+                <span>Set your bankroll — in Ladder mode, this is distributed across 49% → 35% with heavy allocation at top</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary">4.</span>
-                <span>The bot automatically runs every 15 minutes to place orders on each new market</span>
+                <span>Click "Start Bot" to begin — the bot will place limit orders on the next market immediately</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary">5.</span>
-                <span>Click "Stop Bot" to pause the bot at any time</span>
+                <span>The bot automatically runs every 15 minutes to place orders on each new market</span>
               </li>
             </ul>
+          </div>
+
+          {/* Ladder Mode Explanation */}
+          <div className="border border-border/50 rounded-lg bg-secondary/30 p-4">
+            <h3 className="font-display text-sm font-semibold text-primary mb-2">
+              Ladder Mode Explained
+            </h3>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>
+                <strong>Ladder betting</strong> spreads your bankroll across multiple probability levels (49% down to 35%)
+                with exponentially tapered allocation — heavy at the top, light at the bottom.
+              </p>
+              <div className="bg-card/50 rounded-lg p-3 space-y-1 font-mono text-xs border border-border/30">
+                <div className="flex items-center gap-2">
+                  <span className="text-primary">49%</span>
+                  <span className="text-muted-foreground/70">→ ~25% of bankroll (most likely to fill)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-primary">48%</span>
+                  <span className="text-muted-foreground/70">→ ~18% of bankroll</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">...</span>
+                  <span className="text-muted-foreground/70">→ tapers down</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-primary">35%</span>
+                  <span className="text-muted-foreground/70">→ ~1% of bankroll (highest profit if filled)</span>
+                </div>
+              </div>
+              <p className="text-muted-foreground/80">
+                This captures more arbitrage opportunities: top rungs fill frequently for steady gains,
+                while lower rungs occasionally fill for larger profits (buying at 35% yields 86% return vs 4% at 48%).
+              </p>
+            </div>
           </div>
 
           {/* Why It Works Section */}
@@ -368,57 +547,232 @@ const BettingBotTerminal = () => {
                 </div>
               </div>
 
-              {/* Price Selection Row */}
+              {/* Ladder Mode Toggle */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <label className="text-sm font-medium text-muted-foreground min-w-[120px]">
-                  Order Price:
+                  Betting Mode:
                 </label>
-                
-                {/* Price Dropdown */}
-                <div className="relative flex-1 max-w-xs" ref={priceDropdownRef}>
+
+                <div className="flex items-center gap-4">
                   <button
                     type="button"
-                    onClick={() => !isBotRunning && setIsPriceDropdownOpen(!isPriceDropdownOpen)}
+                    onClick={() => !isBotRunning && setLadderEnabled(false)}
                     disabled={isBotRunning}
-                    className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-lg bg-secondary/50 border border-border text-sm hover:border-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      !ladderEnabled
+                        ? "bg-primary/20 border border-primary/50 text-primary"
+                        : "bg-secondary/50 border border-border text-muted-foreground hover:border-primary/30"
+                    }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <Percent className="w-4 h-4 text-primary" />
-                      <span className="font-mono">{selectedPrice}%{selectedPrice === 48 && " (Recommended)"}</span>
-                    </div>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${isPriceDropdownOpen ? "rotate-180" : ""}`} />
+                    <Percent className="w-4 h-4" />
+                    <span className="font-mono">Simple</span>
                   </button>
-
-                  {isPriceDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-xl z-[100] overflow-hidden max-h-[250px] overflow-y-auto">
-                      {PRICE_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => {
-                            setSelectedPrice(option.value);
-                            setIsPriceDropdownOpen(false);
-                          }}
-                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                            selectedPrice === option.value
-                              ? "bg-primary/20 text-primary"
-                              : "hover:bg-secondary text-foreground"
-                          }`}
-                        >
-                          <span className="font-mono">{option.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => !isBotRunning && setLadderEnabled(true)}
+                    disabled={isBotRunning}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      ladderEnabled
+                        ? "bg-primary/20 border border-primary/50 text-primary"
+                        : "bg-secondary/50 border border-border text-muted-foreground hover:border-primary/30"
+                    }`}
+                  >
+                    <Layers className="w-4 h-4" />
+                    <span className="font-mono">Ladder</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Order Size Row */}
+              {/* Simple Mode: Price Selection Row */}
+              {!ladderEnabled && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <label className="text-sm font-medium text-muted-foreground min-w-[120px]">
+                    Order Price:
+                  </label>
+
+                  {/* Price Dropdown */}
+                  <div className="relative flex-1 max-w-xs" ref={priceDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => !isBotRunning && setIsPriceDropdownOpen(!isPriceDropdownOpen)}
+                      disabled={isBotRunning}
+                      className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-lg bg-secondary/50 border border-border text-sm hover:border-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Percent className="w-4 h-4 text-primary" />
+                        <span className="font-mono">{selectedPrice}%{selectedPrice === 48 && " (Recommended)"}</span>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${isPriceDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {isPriceDropdownOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-xl z-[100] overflow-hidden max-h-[250px] overflow-y-auto">
+                        {PRICE_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPrice(option.value);
+                              setIsPriceDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                              selectedPrice === option.value
+                                ? "bg-primary/20 text-primary"
+                                : "hover:bg-secondary text-foreground"
+                            }`}
+                          >
+                            <span className="font-mono">{option.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Ladder Mode: Price Range Configuration */}
+              {ladderEnabled && (
+                <>
+                  {/* Max Price (Top of Ladder) */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <label className="text-sm font-medium text-muted-foreground min-w-[120px]">
+                      Top Price:
+                    </label>
+
+                    <div className="relative flex-1 max-w-xs" ref={maxPriceDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => !isBotRunning && setIsMaxPriceDropdownOpen(!isMaxPriceDropdownOpen)}
+                        disabled={isBotRunning}
+                        className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-lg bg-secondary/50 border border-border text-sm hover:border-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex items-center gap-3">
+                          <TrendingDown className="w-4 h-4 text-primary rotate-180" />
+                          <span className="font-mono">{ladderMaxPrice}% (Heavy allocation)</span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${isMaxPriceDropdownOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {isMaxPriceDropdownOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-xl z-[100] overflow-hidden">
+                          {LADDER_MAX_PRICE_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setLadderMaxPrice(option.value);
+                                setIsMaxPriceDropdownOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                                ladderMaxPrice === option.value
+                                  ? "bg-primary/20 text-primary"
+                                  : "hover:bg-secondary text-foreground"
+                              }`}
+                            >
+                              <span className="font-mono">{option.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Min Price (Bottom of Ladder) */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <label className="text-sm font-medium text-muted-foreground min-w-[120px]">
+                      Bottom Price:
+                    </label>
+
+                    <div className="relative flex-1 max-w-xs" ref={minPriceDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => !isBotRunning && setIsMinPriceDropdownOpen(!isMinPriceDropdownOpen)}
+                        disabled={isBotRunning}
+                        className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-lg bg-secondary/50 border border-border text-sm hover:border-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex items-center gap-3">
+                          <TrendingDown className="w-4 h-4 text-primary" />
+                          <span className="font-mono">{ladderMinPrice}% (Light allocation)</span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${isMinPriceDropdownOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {isMinPriceDropdownOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-xl z-[100] overflow-hidden">
+                          {LADDER_MIN_PRICE_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setLadderMinPrice(option.value);
+                                setIsMinPriceDropdownOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                                ladderMinPrice === option.value
+                                  ? "bg-primary/20 text-primary"
+                                  : "hover:bg-secondary text-foreground"
+                              }`}
+                            >
+                              <span className="font-mono">{option.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Taper Factor */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <label className="text-sm font-medium text-muted-foreground min-w-[120px]">
+                      Taper:
+                    </label>
+
+                    <div className="relative flex-1 max-w-xs" ref={taperDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => !isBotRunning && setIsTaperDropdownOpen(!isTaperDropdownOpen)}
+                        disabled={isBotRunning}
+                        className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-lg bg-secondary/50 border border-border text-sm hover:border-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Layers className="w-4 h-4 text-primary" />
+                          <span className="font-mono">{TAPER_FACTOR_OPTIONS.find(o => o.value === taperFactor)?.label}</span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${isTaperDropdownOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {isTaperDropdownOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-xl z-[100] overflow-hidden">
+                          {TAPER_FACTOR_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setTaperFactor(option.value);
+                                setIsTaperDropdownOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                                taperFactor === option.value
+                                  ? "bg-primary/20 text-primary"
+                                  : "hover:bg-secondary text-foreground"
+                              }`}
+                            >
+                              <span className="font-mono">{option.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Order Size / Bankroll Row */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <label className="text-sm font-medium text-muted-foreground min-w-[120px]">
-                  Order Size:
+                  {ladderEnabled ? "Total Bankroll:" : "Order Size:"}
                 </label>
-                
+
                 {/* Order Size Input */}
                 <div className="relative flex-1 max-w-xs">
                   <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-secondary/50 border border-border text-sm">
@@ -426,16 +780,45 @@ const BettingBotTerminal = () => {
                     <input
                       type="number"
                       value={orderSize}
-                      onChange={(e) => setOrderSize(Math.max(3, parseInt(e.target.value) || 3))}
+                      onChange={(e) => setOrderSize(Math.max(ladderEnabled ? 50 : 3, parseInt(e.target.value) || (ladderEnabled ? 50 : 3)))}
                       disabled={isBotRunning}
-                      min="3"
-                      max="1000"
+                      min={ladderEnabled ? 50 : 3}
+                      max="10000"
                       className="bg-transparent border-none outline-none font-mono w-20 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
-                    <span className="text-muted-foreground text-xs">USD per side</span>
+                    <span className="text-muted-foreground text-xs">
+                      {ladderEnabled ? "USD total (distributed)" : "USD per side"}
+                    </span>
                   </div>
                 </div>
               </div>
+
+              {/* Ladder Preview */}
+              {ladderEnabled && ladderRungs.length > 0 && (
+                <div className="border border-border/50 rounded-lg bg-secondary/20 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Layers className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-medium text-muted-foreground">
+                      LADDER PREVIEW ({ladderRungs.length} price levels, {ladderRungs.length * 2} orders total)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1 text-xs font-mono">
+                    {ladderRungs.map((rung, idx) => (
+                      <div
+                        key={rung.pricePercent}
+                        className={`px-2 py-1 rounded ${
+                          idx === 0 ? "bg-primary/20 text-primary" : "bg-secondary/50 text-muted-foreground"
+                        }`}
+                      >
+                        <span className="font-bold">{rung.pricePercent}%</span>
+                        <span className="text-muted-foreground/70 ml-1">
+                          ${rung.sizeUsd.toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Start/Stop Bot Button Row */}
               <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -476,6 +859,12 @@ const BettingBotTerminal = () => {
               </div>
             </div>
           )}
+
+          {/* Position Dashboard - Shows when bot is running or has placed orders */}
+          <PositionDashboard
+            asset={selectedAsset}
+            isActive={isBotRunning}
+          />
 
           {/* Logs Output */}
           <div className="relative z-10 border border-border rounded-lg bg-card/80 backdrop-blur-sm">

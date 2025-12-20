@@ -29,6 +29,48 @@ export interface OrderResponse {
 }
 
 /**
+ * Ladder betting configuration
+ */
+export interface LadderConfig {
+  /** Enable ladder betting mode */
+  enabled: boolean;
+  /** Highest probability level (e.g., 49 for 49%). Default: 49 */
+  maxPrice?: number;
+  /** Lowest probability level (e.g., 35 for 35%). Default: 35 */
+  minPrice?: number;
+  /** Taper factor - higher = more aggressive taper (1.0-3.0). Default: 1.5 */
+  taperFactor?: number;
+}
+
+/**
+ * Individual ladder rung (price level with allocation)
+ */
+export interface LadderRung {
+  /** Price as percentage (e.g., 49) */
+  pricePercent: number;
+  /** Price as decimal (e.g., 0.49) */
+  priceDecimal: number;
+  /** USD allocation for this rung */
+  sizeUsd: number;
+  /** Percentage of total bankroll */
+  allocationPercent: number;
+}
+
+/**
+ * Result for a single ladder rung order placement
+ */
+export interface LadderRungResult {
+  /** Price level as percentage */
+  pricePercent: number;
+  /** USD allocated to this rung */
+  sizeUsd: number;
+  /** Up order result */
+  up?: OrderResponse;
+  /** Down order result */
+  down?: OrderResponse;
+}
+
+/**
  * Market order result from the limit order bot
  */
 export interface MarketOrderResult {
@@ -36,10 +78,17 @@ export interface MarketOrderResult {
   marketTitle?: string;
   marketStartTime: string;
   targetTimestamp: number;
+  /** Orders placed for Up and Down sides (simple mode) */
   ordersPlaced?: {
     up?: OrderResponse;
     down?: OrderResponse;
   };
+  /** Ladder orders placed (ladder mode) */
+  ladderOrdersPlaced?: LadderRungResult[];
+  /** Total orders attempted in ladder mode */
+  ladderTotalOrders?: number;
+  /** Successful orders in ladder mode */
+  ladderSuccessfulOrders?: number;
   error?: string;
 }
 
@@ -48,10 +97,12 @@ export interface MarketOrderResult {
  */
 export interface LimitOrderBotRequest {
   asset: SupportedAsset;
-  /** Order price as a percentage (e.g., 48 for 48%). Optional, defaults to 48% */
+  /** Order price as a percentage (e.g., 48 for 48%). Optional, defaults to 48% - ignored if ladder.enabled */
   price?: number;
-  /** Order size in USD total. Optional, defaults to $25 */
+  /** Total bankroll in USD. For ladder mode, this is distributed across rungs. Defaults to $25 */
   sizeUsd?: number;
+  /** Ladder betting configuration */
+  ladder?: LadderConfig;
 }
 
 /**
@@ -63,6 +114,12 @@ export interface LimitOrderBotResponse {
     asset: SupportedAsset;
     pricePercent: number;
     sizeUsd: number;
+    /** Whether ladder mode was used */
+    ladderMode: boolean;
+    /** Ladder configuration used (if ladder mode) */
+    ladderConfig?: LadderConfig;
+    /** Ladder rungs with allocations (if ladder mode) */
+    ladderRungs?: LadderRung[];
     market: MarketOrderResult;
   };
   logs: BotLogEntry[];
