@@ -10,6 +10,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@dome-api/sdk": "^0.0.8",
+    "@privy-io/server-auth": "^1.32.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.462.0",

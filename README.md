@@ -73,8 +73,9 @@ A key feature driving adoption is the ability to **stake $PREDICT for attractive
 
 | Feature | Status | Description | Setup Guide |
 |---------|--------|-------------|-------------|
-| **AI Market Analysis** | ✅ Released | Paste a Kalshi or Polymarket URL and get instant AI-powered analysis with probability estimates, confidence scores, and trading recommendations | [📖 Setup Guide](docs/features/market-analysis.md) |
+| **AI Market Analysis** | ✅ Released | Paste a Kalshi or Polymarket URL and get instant AI-powered analysis with probability estimates, confidence scores, and trading recommendations. Includes **Polyfactual Deep Research** — ask any question and get comprehensive AI-powered answers with citations. | [📖 Setup Guide](docs/features/market-analysis.md) |
 | **Betting Bots** | ✅ Released | Polymarket 15 Minute Up/Down Arbitrage Bot (more bots coming) | [📖 Setup Guide](docs/features/betting-bots.md) |
+| **Wallet Tracking** | ✅ Released | Real-time order tracking for any Polymarket wallets using Dome SDK WebSockets — 10 seconds faster than hosted bots | [📖 Setup Guide](docs/features/wallet-tracking.md) |
 
 ## 🔮 Coming Soon
 
@@ -82,7 +83,7 @@ A key feature driving adoption is the ability to **stake $PREDICT for attractive
 |---------|-------------|
 | **Agent Battles (x402)** | Pit AI agents against each other to discover winning strategies |
 | **No Code Builder** | Build trading strategies without writing code |
-| **Whale Tracking** | Monitor and follow large traders across markets |
+| **Whale Tracking** | Automated alerts and analysis for large traders across markets |
 | **Copytrading** | Automatically copy top-performing traders |
 | **Arbitrage Opportunity** | Detect and exploit cross-platform price differences |
 | **Perps Trading / Leverage** | Leveraged prediction market positions |
@@ -105,8 +106,10 @@ PredictOS/
     └── functions/
         ├── _shared/                 # Shared utilities
         │   ├── ai/                  # AI integrations (xAI Grok & OpenAI)
-        │   └── dome/                # Dome API client
+        │   ├── dome/                # Dome API client
+        │   └── polyfactual/         # Polyfactual Deep Research client
         ├── analyze-event-markets/   # Market analysis endpoint
+        ├── polyfactual-research/    # Deep research endpoint
         └── <feature-name>/          # Future edge functions
 ```
 
@@ -140,8 +143,9 @@ cp .env.example .env.local
 Edit `.env.local` with the credentials required for the features you want to use:
 
 > 📖 **Feature-specific setup guides:**
-> - **Market Analysis:** [docs/features/market-analysis.md](docs/features/market-analysis.md) — requires `DOME_API_KEY` + AI provider key (`XAI_API_KEY` or `OPENAI_API_KEY`)
+> - **Market Analysis:** [docs/features/market-analysis.md](docs/features/market-analysis.md) — requires `DOME_API_KEY` + AI provider key (`XAI_API_KEY` or `OPENAI_API_KEY`). Polyfactual tab requires `POLYFACTUAL_API_KEY`.
 > - **Betting Bots:** [docs/features/betting-bots.md](docs/features/betting-bots.md) — requires `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`
+> - **Wallet Tracking:** [docs/features/wallet-tracking.md](docs/features/wallet-tracking.md) — requires `DOME_API_KEY` (frontend only, no Supabase needed)
 
 Example for Market Analysis:
 
@@ -151,6 +155,9 @@ DOME_API_KEY=your_dome_api_key      # Get from https://dashboard.domeapi.io
 # AI Provider (only one is required)
 XAI_API_KEY=your_xai_api_key        # Get from https://x.ai
 OPENAI_API_KEY=your_openai_api_key  # Get from https://platform.openai.com
+
+# Polyfactual Deep Research (optional, for Polyfactual tab)
+POLYFACTUAL_API_KEY=your_polyfactual_api_key  # Contact Polyfactual to obtain
 ```
 
 Example for Betting Bots:
@@ -206,6 +213,7 @@ SUPABASE_ANON_KEY=<anon key from supabase status>
 # Edge Function URLs (for local development)
 # Note that the base url might vary depending on `supabase status`:
 SUPABASE_EDGE_FUNCTION_ANALYZE_EVENT_MARKETS=http://127.0.0.1:54321/functions/v1/analyze-event-markets  # Required for Market Analysis
+SUPABASE_EDGE_FUNCTION_POLYFACTUAL_RESEARCH=http://127.0.0.1:54321/functions/v1/polyfactual-research    # Required for Polyfactual tab
 SUPABASE_EDGE_FUNCTION_BETTING_BOT=http://127.0.0.1:54321/functions/v1/polymarket-up-down-15-markets    # Required for Betting Bots
 ```
 
@@ -258,6 +266,19 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
       <p><strong>The FIRST all-in-one prediction markets bot.</strong> Available on Telegram and soon on web, OKBet makes it easy to trade prediction markets from anywhere.</p>
       <p>🔗 Our <a href="https://x.com/predict_agent">Predict_Agent</a> provides direct OKBet links to place bets on Kalshi and Polymarket in Telegram.</p>
       <p><a href="https://t.me/okdotbet_bot">🤖 Telegram</a> · <a href="https://tryokbet.com/">🌐 Website</a> · <a href="https://docs.tryokbet.com/">📖 Docs</a> · <a href="https://x.com/tryokbet">𝕏 Twitter</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="120" align="center">
+      <a href="https://www.polyfactual.com/">
+        <img src="terminal/public/polyfacts.svg" alt="Polyfactual" width="80" height="80" />
+      </a>
+    </td>
+    <td>
+      <h3><a href="https://www.polyfactual.com/">Polyfactual</a></h3>
+      <p><strong>Deep AI research & API layer for prediction markets.</strong> Polyfactual also provides Weekly Polymarket livestreams on news + ecosystem developments.</p>
+      <p>🔗 PredictOS integrates Polyfactual's Deep Research API to power the Polyfactual tab in Market Analysis — ask any question and get comprehensive answers with citations.</p>
+      <p><a href="https://www.polyfactual.com/">🌐 Website</a> · <a href="https://x.com/polyfactual">𝕏 Twitter</a></p>
     </td>
   </tr>
 </table>

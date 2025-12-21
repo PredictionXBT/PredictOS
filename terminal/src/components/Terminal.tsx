@@ -3,14 +3,27 @@
 import { useState } from "react";
 import Image from "next/image";
 import TerminalInput, { type AIModel } from "./TerminalInput";
+import PolyfactualInput from "./PolyfactualInput";
 import AnalysisOutput from "./AnalysisOutput";
+import PolyfactualOutput from "./PolyfactualOutput";
 import type { MarketAnalysis, AnalyzeMarketResponse } from "@/types/api";
+import type { PolyfactualResearchResponse, PolyfactualCitation } from "@/types/polyfactual";
+
+type TabType = "markets" | "polyfactual";
 
 interface AnalysisResult {
   id: string;
   analysis: MarketAnalysis;
   timestamp: Date;
   marketUrl?: string;
+}
+
+interface PolyfactualResult {
+  id: string;
+  answer: string;
+  citations?: PolyfactualCitation[];
+  timestamp: Date;
+  query: string;
 }
 
 /**
@@ -26,15 +39,24 @@ function isPredictionMarketUrl(url: string): boolean {
 }
 
 const Terminal = () => {
+  const [activeTab, setActiveTab] = useState<TabType>("markets");
+  
+  // Market analysis state
   const [analyses, setAnalyses] = useState<AnalysisResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [shouldClearInput, setShouldClearInput] = useState(false);
+  const [isMarketLoading, setIsMarketLoading] = useState(false);
+  const [marketError, setMarketError] = useState<string | null>(null);
+  const [shouldClearMarketInput, setShouldClearMarketInput] = useState(false);
 
-  const handleSubmit = async (url: string, model: AIModel) => {
-    setIsLoading(true);
-    setError(null);
-    setShouldClearInput(false);
+  // Polyfactual state
+  const [polyfactualResults, setPolyfactualResults] = useState<PolyfactualResult[]>([]);
+  const [isPolyfactualLoading, setIsPolyfactualLoading] = useState(false);
+  const [polyfactualError, setPolyfactualError] = useState<string | null>(null);
+  const [shouldClearPolyfactualInput, setShouldClearPolyfactualInput] = useState(false);
+
+  const handleMarketSubmit = async (url: string, model: AIModel) => {
+    setIsMarketLoading(true);
+    setMarketError(null);
+    setShouldClearMarketInput(false);
     
     try {
       // Validate the URL
@@ -69,11 +91,49 @@ const Terminal = () => {
       };
 
       setAnalyses(prev => [result, ...prev]);
-      setShouldClearInput(true);
+      setShouldClearMarketInput(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+      setMarketError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
-      setIsLoading(false);
+      setIsMarketLoading(false);
+    }
+  };
+
+  const handlePolyfactualSubmit = async (query: string) => {
+    setIsPolyfactualLoading(true);
+    setPolyfactualError(null);
+    setShouldClearPolyfactualInput(false);
+    
+    try {
+      // Call our server-side API
+      const response = await fetch("/api/polyfactual-research", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query }),
+      });
+
+      const data: PolyfactualResearchResponse = await response.json();
+
+      if (!data.success || !data.answer) {
+        throw new Error(data.error || "Failed to get research answer");
+      }
+
+      const result: PolyfactualResult = {
+        id: data.metadata.requestId,
+        answer: data.answer,
+        citations: data.citations,
+        timestamp: new Date(data.metadata.timestamp),
+        query: data.metadata.query,
+      };
+
+      setPolyfactualResults(prev => [result, ...prev]);
+      setShouldClearPolyfactualInput(true);
+    } catch (err) {
+      setPolyfactualError(err instanceof Error ? err.message : "An unexpected error occurred");
+    } finally {
+      setIsPolyfactualLoading(false);
     }
   };
 
@@ -83,58 +143,128 @@ const Terminal = () => {
         <div className="space-y-6">
           {/* Header - Always visible */}
           <div className="text-center py-8 fade-in">
-            {/* AI Market Analysis */}
-            <div className="relative mb-8">
-              <h2 className="font-display text-xl md:text-2xl font-bold text-primary text-glow mb-3">
-                AI Market Analysis
-              </h2>
-              <p className="text-muted-foreground max-w-lg mx-auto">
-                Paste a Kalshi or Polymarket URL to get instant AI-powered analysis 
-                with probability estimates and alpha opportunities.
-              </p>
+            {/* AI Market Analysis Title */}
+            <h2 className="font-display text-xl md:text-2xl font-bold text-primary text-glow mb-6">
+              AI Market Analysis
+            </h2>
+
+            {/* Tabs */}
+            <div className="flex items-center justify-center gap-1 mb-6">
+              <button
+                onClick={() => setActiveTab("markets")}
+                className={`px-4 py-2 rounded-lg text-sm font-display transition-all ${
+                  activeTab === "markets"
+                    ? "bg-primary/20 text-primary border border-primary/50"
+                    : "bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/50 border border-transparent"
+                }`}
+              >
+                Kalshi/Polymarket
+              </button>
+              <button
+                onClick={() => setActiveTab("polyfactual")}
+                className={`px-4 py-2 rounded-lg text-sm font-display transition-all ${
+                  activeTab === "polyfactual"
+                    ? "bg-violet-500/20 text-violet-400 border border-violet-500/50"
+                    : "bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/50 border border-transparent"
+                }`}
+              >
+                Polyfactual
+              </button>
             </div>
 
-            {/* Powered by Dome */}
+            {/* Description */}
+            <p className="text-muted-foreground max-w-lg mx-auto mb-6">
+              {activeTab === "markets" 
+                ? "Paste a Kalshi or Polymarket URL to get instant AI-powered analysis with probability estimates and alpha opportunities."
+                : "Ask any research question and get comprehensive AI-powered answers with citations."
+              }
+            </p>
+
+            {/* Powered by */}
             <div>
-              <a 
-                href="https://domeapi.io/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 border border-border/50 text-xs text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
-              >
-                <Image 
-                  src="/dome-icon-light.svg" 
-                  alt="Dome" 
-                  width={16} 
-                  height={16} 
-                  className="w-4 h-4"
-                />
-                <span>Powered by Dome</span>
-              </a>
+              {activeTab === "markets" ? (
+                <a 
+                  href="https://domeapi.io/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 border border-border/50 text-xs text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
+                >
+                  <Image 
+                    src="/dome-icon-light.svg" 
+                    alt="Dome" 
+                    width={16} 
+                    height={16} 
+                    className="w-4 h-4"
+                  />
+                  <span>Powered by Dome</span>
+                </a>
+              ) : (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-xs text-violet-400">
+                  <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
+                  <span>Powered by Polyfactual Deep Research</span>
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Error Display */}
-          {error && (
-            <div className="border border-destructive/50 rounded-lg bg-destructive/10 p-4 fade-in">
-              <p className="text-destructive text-sm font-mono">{`> Error: ${error}`}</p>
-            </div>
+          {/* Market Analysis Tab Content */}
+          {activeTab === "markets" && (
+            <>
+              {/* Error Display */}
+              {marketError && (
+                <div className="border border-destructive/50 rounded-lg bg-destructive/10 p-4 fade-in">
+                  <p className="text-destructive text-sm font-mono">{`> Error: ${marketError}`}</p>
+                </div>
+              )}
+
+              {/* Input */}
+              <TerminalInput onSubmit={handleMarketSubmit} isLoading={isMarketLoading} shouldClear={shouldClearMarketInput} />
+
+              {/* Analysis Results */}
+              <div className="space-y-4">
+                {analyses.map((result) => (
+                  <AnalysisOutput
+                    key={result.id}
+                    analysis={result.analysis}
+                    timestamp={result.timestamp}
+                    marketUrl={result.marketUrl}
+                  />
+                ))}
+              </div>
+            </>
           )}
 
-          {/* Input */}
-          <TerminalInput onSubmit={handleSubmit} isLoading={isLoading} shouldClear={shouldClearInput} />
+          {/* Polyfactual Tab Content */}
+          {activeTab === "polyfactual" && (
+            <>
+              {/* Error Display */}
+              {polyfactualError && (
+                <div className="border border-destructive/50 rounded-lg bg-destructive/10 p-4 fade-in">
+                  <p className="text-destructive text-sm font-mono">{`> Error: ${polyfactualError}`}</p>
+                </div>
+              )}
 
-          {/* Analysis Results */}
-          <div className="space-y-4">
-            {analyses.map((result) => (
-              <AnalysisOutput
-                key={result.id}
-                analysis={result.analysis}
-                timestamp={result.timestamp}
-                marketUrl={result.marketUrl}
+              {/* Input */}
+              <PolyfactualInput 
+                onSubmit={handlePolyfactualSubmit} 
+                isLoading={isPolyfactualLoading} 
+                shouldClear={shouldClearPolyfactualInput} 
               />
-            ))}
-          </div>
+
+              {/* Research Results */}
+              <div className="space-y-4">
+                {polyfactualResults.map((result) => (
+                  <PolyfactualOutput
+                    key={result.id}
+                    answer={result.answer}
+                    citations={result.citations}
+                    timestamp={result.timestamp}
+                    query={result.query}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -142,4 +272,3 @@ const Terminal = () => {
 };
 
 export default Terminal;
-
