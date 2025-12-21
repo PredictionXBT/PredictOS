@@ -143,6 +143,11 @@ const BettingBotTerminal = () => {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Guards to prevent duplicate order submissions
+  const isRetryPendingRef = useRef<boolean>(false); // True when a retry setTimeout is scheduled
+  const lastSubmittedTimestampRef = useRef<number | null>(null); // Track last market timestamp we submitted for
+  const submitInFlightRef = useRef<boolean>(false); // True when a submitOrder call is in progress
+
   // Ladder mode state
   const [ladderEnabled, setLadderEnabled] = useState(false);
   const [ladderMaxPrice, setLadderMaxPrice] = useState(49);
@@ -208,7 +213,41 @@ const BettingBotTerminal = () => {
   }, []);
 
   // Submit a single order to the limit order bot
-  const submitOrder = useCallback(async () => {
+  const submitOrder = useCallback(async (isRetryCall: boolean = false) => {
+    // Guard: don't submit if bot was stopped
+    if (!pollIntervalRef.current) {
+      console.log("[LadderBot] submitOrder skipped - bot not running");
+      return;
+    }
+
+    // Guard: don't submit if another submit is already in flight
+    if (submitInFlightRef.current) {
+      console.log("[LadderBot] submitOrder skipped - another submit in flight");
+      return;
+    }
+
+    // Guard: if a retry is pending and this is NOT the retry call, skip (let the retry handle it)
+    if (isRetryPendingRef.current && !isRetryCall) {
+      console.log("[LadderBot] submitOrder skipped - retry already pending");
+      return;
+    }
+
+    // If this IS the retry call, clear the retry pending flag
+    if (isRetryCall) {
+      isRetryPendingRef.current = false;
+    }
+
+    // Calculate the target market timestamp to check for duplicates
+    const targetTimestamp = Math.ceil(Date.now() / 1000 / 900) * 900; // Next 15-min block
+
+    // Guard: don't submit if we already submitted for this market timestamp
+    if (lastSubmittedTimestampRef.current === targetTimestamp) {
+      console.log("[LadderBot] submitOrder skipped - already submitted for timestamp", targetTimestamp);
+      return;
+    }
+
+    // Set in-flight guard
+    submitInFlightRef.current = true;
     setIsSubmitting(true);
     setError(null);
 
@@ -252,19 +291,47 @@ const BettingBotTerminal = () => {
         return;
       }
 
+      // Handle waiting response - schedule retry when within 3-min window
+      if (data.waiting && data.waitSeconds) {
+        const waitMinutes = Math.floor(data.waitSeconds / 60);
+        const waitSecs = data.waitSeconds % 60;
+        addLog("INFO", `Waiting for 3-min window — will place orders in ${waitMinutes}m ${waitSecs}s`);
+
+        // Mark that a retry is pending (prevents polling interval from double-submitting)
+        isRetryPendingRef.current = true;
+
+        // Schedule retry after waitSeconds (add 5 second buffer)
+        const retryDelay = (data.waitSeconds + 5) * 1000;
+        setTimeout(() => {
+          if (pollIntervalRef.current) { // Only retry if bot is still running
+            addLog("INFO", "3-min window reached — placing orders now");
+            submitOrder(true); // Pass true to indicate this is the retry call
+          } else {
+            isRetryPendingRef.current = false; // Clear flag if bot was stopped
+          }
+        }, retryDelay);
+        return;
+      }
+
       // Log market result with Polymarket URL and order status
       if (data.data?.market) {
         const market = data.data.market;
         const asset = data.data.asset;
         const sizeUsd = data.data.sizeUsd;
         const polymarketUrl = `https://polymarket.com/event/${market.marketSlug}`;
-        
+
         // Calculate market start and end times from the timestamp
         const marketStartTime = new Date(market.targetTimestamp * 1000);
         const marketEndTime = new Date(marketStartTime.getTime() + 15 * 60 * 1000);
         const startTimeStr = formatNextMarketTime(marketStartTime);
         const endTimeStr = formatNextMarketTime(marketEndTime);
-        
+
+        // Record the timestamp we submitted for (prevents duplicate submissions for same market)
+        if (!market.error && market.targetTimestamp) {
+          lastSubmittedTimestampRef.current = market.targetTimestamp;
+          console.log("[LadderBot] Recorded submitted timestamp:", market.targetTimestamp);
+        }
+
         if (market.error) {
           addLog("ERROR", `${asset} Market ${startTimeStr} -- ${endTimeStr}: ${polymarketUrl} — Failed: ${market.error}`);
         } else if (data.data?.ladderMode && market.ladderOrdersPlaced) {
@@ -297,12 +364,19 @@ const BettingBotTerminal = () => {
       setError(errorMsg);
       addLog("ERROR", `Submission failed: ${errorMsg}`);
     } finally {
+      // Clear in-flight guard
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   }, [selectedAsset, selectedPrice, orderSize, ladderEnabled, ladderMaxPrice, ladderMinPrice, taperFactor, addLog]);
 
   // Start the bot with polling
   const startBot = useCallback(() => {
+    // Reset all guards for fresh start
+    isRetryPendingRef.current = false;
+    submitInFlightRef.current = false;
+    lastSubmittedTimestampRef.current = null;
+
     setIsBotRunning(true);
     setError(null);
     if (ladderEnabled) {
@@ -310,23 +384,30 @@ const BettingBotTerminal = () => {
     } else {
       addLog("INFO", `Bot started — ${selectedAsset} at ${selectedPrice}% with $${orderSize} total`);
     }
-    
-    // Submit immediately
-    submitOrder();
-    
-    // Set up 15-minute polling
+
+    // Set up 15-minute polling FIRST (so guard in submitOrder works)
     pollIntervalRef.current = setInterval(() => {
       submitOrder();
     }, POLL_INTERVAL_MS);
+
+    // Submit immediately after setting up interval
+    submitOrder();
   }, [selectedAsset, selectedPrice, orderSize, ladderEnabled, ladderMaxPrice, ladderMinPrice, addLog, submitOrder]);
 
   // Stop the bot
   const stopBot = useCallback(() => {
+    console.log("[LadderBot] stopBot called, interval ref:", pollIntervalRef.current);
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
+      console.log("[LadderBot] Interval cleared");
     }
+    // Reset all guards
+    isRetryPendingRef.current = false;
+    submitInFlightRef.current = false;
+    lastSubmittedTimestampRef.current = null;
     setIsBotRunning(false);
+    setIsSubmitting(false); // Reset submitting state in case order was in flight
     addLog("INFO", "Bot stopped");
   }, [addLog]);
 

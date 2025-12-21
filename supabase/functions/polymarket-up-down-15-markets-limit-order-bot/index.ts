@@ -30,6 +30,9 @@ const DEFAULT_LADDER_MAX_PRICE = 49;
 const DEFAULT_LADDER_MIN_PRICE = 35;
 const DEFAULT_LADDER_TAPER_FACTOR = 1.5;
 
+// Timing configuration
+const MAX_SECONDS_BEFORE_MARKET = 180; // Only place orders within 3 minutes of market start
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -142,6 +145,53 @@ Deno.serve(async (req: Request) => {
     const timestamp = getNext15MinTimestamp();
     const marketSlug = buildMarketSlug(normalizedAsset, timestamp);
 
+    // Check if we're within the placement window (3 minutes before market start)
+    const now = nowUtcSeconds();
+    const secondsUntilMarket = timestamp - now;
+
+    if (secondsUntilMarket > MAX_SECONDS_BEFORE_MARKET) {
+      const minutesUntil = Math.floor(secondsUntilMarket / 60);
+      const secondsRemaining = secondsUntilMarket % 60;
+      const waitTime = secondsUntilMarket - MAX_SECONDS_BEFORE_MARKET;
+      const waitMinutes = Math.floor(waitTime / 60);
+      const waitSeconds = waitTime % 60;
+
+      logs.push(createLogEntry("INFO", `Market starts in ${minutesUntil}m ${secondsRemaining}s - waiting until 3 min window`, {
+        marketSlug,
+        marketStartTime: formatTimeShort(timestamp),
+        secondsUntilMarket,
+        waitTime: `${waitMinutes}m ${waitSeconds}s`,
+      }));
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          waiting: true,
+          waitSeconds: waitTime,
+          data: {
+            asset: normalizedAsset,
+            pricePercent: orderPrice * 100,
+            sizeUsd: orderSizeUsd,
+            ladderMode,
+            ladderConfig: ladderMode ? ladderConfig : undefined,
+            market: {
+              marketSlug,
+              marketStartTime: formatTimeShort(timestamp),
+              targetTimestamp: timestamp,
+              error: `Waiting - market starts in ${minutesUntil}m ${secondsRemaining}s (will place orders in ${waitMinutes}m ${waitSeconds}s)`,
+            },
+          },
+          logs,
+        } as LimitOrderBotResponse),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    logs.push(createLogEntry("INFO", `Within 3-min window - placing orders`, {
+      marketSlug,
+      secondsUntilMarket,
+    }));
+
     // Initialize the Polymarket client
     let client: PolymarketClient;
     try {
@@ -239,6 +289,7 @@ Deno.serve(async (req: Request) => {
             ladderOrdersPlaced,
             ladderTotalOrders: ladderResults.totalOrders,
             ladderSuccessfulOrders: ladderResults.successfulOrders,
+            ladderVerification: ladderResults.verification,
           };
         } else {
           // Simple mode: single straddle order

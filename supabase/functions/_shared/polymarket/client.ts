@@ -23,6 +23,13 @@ import type {
   MarketPosition,
   PairStatus,
 } from "./types.ts";
+
+// Pre-derived API credentials type
+interface ApiCredentials {
+  key: string;
+  secret: string;
+  passphrase: string;
+}
 import { parseTokenIds, createLogEntry } from "./utils.ts";
 
 // API endpoints
@@ -42,12 +49,14 @@ export class PolymarketClient {
   private config: PolymarketClientConfig;
   private logs: BotLogEntry[] = [];
   private clobClient: typeof ClobClient | null = null;
+  private apiCredentials: ApiCredentials | null = null;
 
-  constructor(config: PolymarketClientConfig) {
+  constructor(config: PolymarketClientConfig, apiCredentials?: ApiCredentials) {
     this.config = {
       ...config,
       signatureType: config.signatureType ?? 1, // Default to Magic/Email login
     };
+    this.apiCredentials = apiCredentials || null;
   }
 
   /**
@@ -74,6 +83,7 @@ export class PolymarketClient {
 
   /**
    * Initialize the CLOB client with API credentials
+   * Uses pre-derived credentials if available to avoid expensive crypto operations
    */
   private async initClobClient(): Promise<typeof ClobClient> {
     if (this.clobClient) {
@@ -87,13 +97,24 @@ export class PolymarketClient {
     try {
       // Create wallet signer from private key
       const signer = new Wallet(privateKey);
-      
-      // Create initial client to derive API credentials
-      const tempClient = new ClobClient(CLOB_HOST, CHAIN_ID, signer);
-      
-      // Derive or create API credentials
-      const creds = await tempClient.createOrDeriveApiKey();
-      this.log("INFO", "API credentials derived successfully");
+
+      let creds;
+
+      // Use pre-derived credentials if available (MUCH faster - avoids CPU timeout)
+      if (this.apiCredentials) {
+        creds = {
+          key: this.apiCredentials.key,
+          secret: this.apiCredentials.secret,
+          passphrase: this.apiCredentials.passphrase,
+        };
+        this.log("INFO", "Using pre-derived API credentials (fast path)");
+      } else {
+        // Fallback: derive credentials (CPU-intensive, may timeout on Edge Functions)
+        this.log("WARN", "No pre-derived credentials - deriving API key (slow, may timeout)");
+        const tempClient = new ClobClient(CLOB_HOST, CHAIN_ID, signer);
+        creds = await tempClient.createOrDeriveApiKey();
+        this.log("INFO", "API credentials derived successfully");
+      }
 
       // Create the full client with credentials and funder
       this.clobClient = new ClobClient(
@@ -108,6 +129,7 @@ export class PolymarketClient {
       this.log("SUCCESS", "CLOB client initialized", {
         funder: `${proxyAddress.slice(0, 10)}...${proxyAddress.slice(-8)}`,
         signatureType,
+        usedPreDerived: !!this.apiCredentials,
       });
 
       return this.clobClient;
@@ -171,10 +193,12 @@ export class PolymarketClient {
 
   /**
    * Place a limit buy order on Polymarket CLOB
+   * @param order - Order arguments
+   * @param useFOK - If true, use Fill-Or-Kill order type (default: false for GTC)
    */
-  async placeOrder(order: OrderArgs): Promise<OrderResponse> {
+  async placeOrder(order: OrderArgs, useFOK: boolean = false): Promise<OrderResponse> {
     const { privateKey, proxyAddress } = this.config;
-    
+
     if (!privateKey) {
       this.log("ERROR", "Missing private key for order placement");
       return {
@@ -191,10 +215,14 @@ export class PolymarketClient {
       };
     }
 
-    this.log("INFO", `Placing ${order.side} order`, {
+    const orderType = useFOK ? OrderType.FOK : OrderType.GTC;
+    const orderTypeName = useFOK ? "FOK" : "GTC";
+
+    this.log("INFO", `Placing ${order.side} order (${orderTypeName})`, {
       tokenId: `${order.tokenId.slice(0, 16)}...`,
       price: order.price,
       size: Math.floor(order.size),
+      orderType: orderTypeName,
     });
 
     try {
@@ -214,10 +242,25 @@ export class PolymarketClient {
           tickSize: DEFAULT_TICK_SIZE,
           negRisk: DEFAULT_NEG_RISK,
         },
-        OrderType.GTC // Good Till Cancelled
+        orderType
       );
 
-      this.log("SUCCESS", `Order placed successfully`, {
+      // For FOK orders, check if it was actually filled
+      // FOK orders that don't fill immediately are cancelled and return status "CANCELLED"
+      if (useFOK && orderResponse?.status === "CANCELLED") {
+        this.log("WARN", `FOK order not filled - no liquidity at price`, {
+          orderId: orderResponse?.orderID || orderResponse?.id,
+          status: orderResponse?.status,
+        });
+        return {
+          success: false,
+          errorMsg: "FOK order not filled - no liquidity at this price",
+          orderId: orderResponse?.orderID || orderResponse?.id,
+          status: orderResponse?.status,
+        };
+      }
+
+      this.log("SUCCESS", `Order ${useFOK ? "filled" : "placed"} successfully`, {
         orderId: orderResponse?.orderID || orderResponse?.id,
         status: orderResponse?.status,
       });
@@ -373,6 +416,7 @@ export class PolymarketClient {
 
   /**
    * Place ladder orders - straddle orders at multiple price levels with tapered allocation
+   * Includes verification step to confirm all orders are in place
    */
   async placeLadderOrders(
     tokenIds: TokenIds,
@@ -385,6 +429,14 @@ export class PolymarketClient {
     results: Array<{ pricePercent: number; sizeUsd: number; up: OrderResponse; down: OrderResponse }>;
     totalOrders: number;
     successfulOrders: number;
+    verification: {
+      verified: boolean;
+      upOrders: number;
+      downOrders: number;
+      expectedPerSide: number;
+      missingUp: number;
+      missingDown: number;
+    };
   }> {
     const rungs = this.calculateLadderRungs(totalBankroll, maxPrice, minPrice, taperFactor);
 
@@ -396,6 +448,7 @@ export class PolymarketClient {
 
     const results: Array<{ pricePercent: number; sizeUsd: number; up: OrderResponse; down: OrderResponse }> = [];
     let successfulOrders = 0;
+    let actualRungs = 0; // Track rungs that weren't skipped
     const totalOrders = rungs.length * 2; // 2 orders per rung (up + down)
 
     // Place orders for each rung
@@ -414,6 +467,8 @@ export class PolymarketClient {
         this.log("WARN", `Skipping rung at ${rung.pricePercent}% - would result in < 5 shares`);
         continue;
       }
+
+      actualRungs++; // Count this rung as placed
 
       this.log("INFO", `Placing ladder rung at ${rung.pricePercent}%`, {
         sizeUsd: `$${rung.sizeUsd.toFixed(2)}`,
@@ -449,13 +504,27 @@ export class PolymarketClient {
       });
     }
 
-    this.log("SUCCESS", `Ladder orders complete`, {
+    this.log("SUCCESS", `Ladder orders placed`, {
       totalOrders,
       successfulOrders,
       successRate: `${((successfulOrders / totalOrders) * 100).toFixed(1)}%`,
     });
 
-    return { rungs, results, totalOrders, successfulOrders };
+    // Verify all orders are in place
+    this.log("INFO", "Running verification check...");
+    const verification = await this.verifyLadderOrders(tokenIds, actualRungs);
+
+    if (verification.verified) {
+      this.log("SUCCESS", `LADDER VERIFIED: All ${verification.upOrders} UP + ${verification.downOrders} DOWN orders confirmed on exchange`);
+    } else {
+      this.log("WARN", `LADDER INCOMPLETE: Missing ${verification.missingUp} UP and ${verification.missingDown} DOWN orders`, {
+        expected: actualRungs,
+        foundUp: verification.upOrders,
+        foundDown: verification.downOrders,
+      });
+    }
+
+    return { rungs, results, totalOrders, successfulOrders, verification };
   }
 
   /**
@@ -576,6 +645,101 @@ export class PolymarketClient {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.log("ERROR", `Failed to get order: ${errorMsg}`);
       return null;
+    }
+  }
+
+  /**
+   * Get all open orders for the user
+   * Optionally filter by asset_id (token ID)
+   */
+  async getOpenOrders(assetId?: string): Promise<OpenOrder[]> {
+    try {
+      const client = await this.initClobClient();
+
+      this.log("INFO", "Fetching open orders...");
+
+      const orders = await client.getOpenOrders();
+
+      // Filter by asset_id if provided
+      let filteredOrders = orders || [];
+      if (assetId && filteredOrders.length > 0) {
+        filteredOrders = filteredOrders.filter((o: OpenOrder) => o.asset_id === assetId);
+      }
+
+      this.log("SUCCESS", `Found ${filteredOrders.length} open orders${assetId ? ` for asset` : ""}`);
+
+      return filteredOrders;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.log("ERROR", `Failed to get open orders: ${errorMsg}`);
+      return [];
+    }
+  }
+
+  /**
+   * Verify ladder orders are in place
+   * Returns verification status for UP and DOWN sides
+   */
+  async verifyLadderOrders(
+    tokenIds: TokenIds,
+    expectedRungs: number
+  ): Promise<{
+    verified: boolean;
+    upOrders: number;
+    downOrders: number;
+    expectedPerSide: number;
+    missingUp: number;
+    missingDown: number;
+  }> {
+    this.log("INFO", "Verifying ladder orders are in place...");
+
+    try {
+      // Fetch all open orders
+      const allOrders = await this.getOpenOrders();
+
+      // Count orders for each side
+      const upOrders = allOrders.filter((o: OpenOrder) =>
+        o.asset_id === tokenIds.up && o.status === "LIVE"
+      ).length;
+
+      const downOrders = allOrders.filter((o: OpenOrder) =>
+        o.asset_id === tokenIds.down && o.status === "LIVE"
+      ).length;
+
+      const missingUp = Math.max(0, expectedRungs - upOrders);
+      const missingDown = Math.max(0, expectedRungs - downOrders);
+      const verified = upOrders >= expectedRungs && downOrders >= expectedRungs;
+
+      if (verified) {
+        this.log("SUCCESS", `Ladder verified: ${upOrders} UP orders, ${downOrders} DOWN orders`, {
+          expectedPerSide: expectedRungs,
+        });
+      } else {
+        this.log("WARN", `Ladder incomplete: ${upOrders}/${expectedRungs} UP, ${downOrders}/${expectedRungs} DOWN`, {
+          missingUp,
+          missingDown,
+        });
+      }
+
+      return {
+        verified,
+        upOrders,
+        downOrders,
+        expectedPerSide: expectedRungs,
+        missingUp,
+        missingDown,
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.log("ERROR", `Failed to verify ladder orders: ${errorMsg}`);
+      return {
+        verified: false,
+        upOrders: 0,
+        downOrders: 0,
+        expectedPerSide: expectedRungs,
+        missingUp: expectedRungs,
+        missingDown: expectedRungs,
+      };
     }
   }
 
@@ -740,6 +904,7 @@ export class PolymarketClient {
 
 /**
  * Create a Polymarket client from environment variables
+ * Supports pre-derived API credentials to avoid CPU-intensive key derivation
  */
 export function createClientFromEnv(): PolymarketClient {
   // @ts-ignore - Deno global
@@ -749,6 +914,14 @@ export function createClientFromEnv(): PolymarketClient {
   // @ts-ignore - Deno global
   const signatureType = parseInt(Deno.env.get("POLYMARKET_SIGNATURE_TYPE") || "1", 10);
 
+  // Pre-derived API credentials (optional but HIGHLY recommended for Edge Functions)
+  // @ts-ignore - Deno global
+  const apiKey = Deno.env.get("POLYMARKET_API_KEY");
+  // @ts-ignore - Deno global
+  const apiSecret = Deno.env.get("POLYMARKET_API_SECRET");
+  // @ts-ignore - Deno global
+  const apiPassphrase = Deno.env.get("POLYMARKET_API_PASSPHRASE");
+
   if (!privateKey) {
     throw new Error("POLYMARKET_WALLET_PRIVATE_KEY environment variable is required");
   }
@@ -757,9 +930,22 @@ export function createClientFromEnv(): PolymarketClient {
     throw new Error("POLYMARKET_PROXY_WALLET_ADDRESS environment variable is required");
   }
 
-  return new PolymarketClient({
-    privateKey,
-    proxyAddress,
-    signatureType,
-  });
+  // Build pre-derived credentials if all three are provided
+  let apiCredentials: ApiCredentials | undefined;
+  if (apiKey && apiSecret && apiPassphrase) {
+    apiCredentials = {
+      key: apiKey,
+      secret: apiSecret,
+      passphrase: apiPassphrase,
+    };
+  }
+
+  return new PolymarketClient(
+    {
+      privateKey,
+      proxyAddress,
+      signatureType,
+    },
+    apiCredentials
+  );
 }

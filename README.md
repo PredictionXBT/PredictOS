@@ -75,6 +75,7 @@ A key feature driving adoption is the ability to **stake $PREDICT for attractive
 |---------|--------|-------------|-------------|
 | **AI Market Analysis** | ✅ Released | Paste a Kalshi or Polymarket URL and get instant AI-powered analysis with probability estimates, confidence scores, and trading recommendations | [📖 Setup Guide](docs/features/market-analysis.md) |
 | **Betting Bots** | ✅ Released | Polymarket 15 Minute Up/Down Arbitrage Bot (more bots coming) | [📖 Setup Guide](docs/features/betting-bots.md) |
+| **Auto-Claim** | ✅ Released | Automatically claim winning positions from resolved Polymarket markets | [📖 Setup Guide](docs/features/auto-claim.md) |
 
 ## 🔮 Coming Soon
 
@@ -158,7 +159,24 @@ Example for Betting Bots:
 ```env
 POLYMARKET_WALLET_PRIVATE_KEY=0x...  # Your wallet private key
 POLYMARKET_PROXY_WALLET_ADDRESS=0x...  # Your Polymarket proxy wallet
+
+# Pre-derived API credentials (REQUIRED to avoid CPU timeout errors)
+POLYMARKET_API_KEY=...
+POLYMARKET_API_SECRET=...
+POLYMARKET_API_PASSPHRASE=...
 ```
+
+> ⚠️ **Important:** The API credentials are derived from your private key and are required to avoid CPU timeout errors. After adding your `POLYMARKET_WALLET_PRIVATE_KEY` to `.env.local`, run this script to auto-generate and populate the credentials:
+>
+> ```bash
+> cd terminal
+> npm install  # First time only
+> node ../scripts/derive-polymarket-creds.js
+> ```
+>
+> The script will automatically update your `supabase/.env.local` file.
+>
+> **Re-run this script if you change wallets** - each wallet has unique API credentials.
 
 > 💡 **Note:** See the setup guides linked above for detailed instructions on obtaining each API key and configuration.
 
@@ -258,6 +276,24 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
       <p><strong>The FIRST all-in-one prediction markets bot.</strong> Available on Telegram and soon on web, OKBet makes it easy to trade prediction markets from anywhere.</p>
       <p>🔗 Our <a href="https://x.com/predict_agent">Predict_Agent</a> provides direct OKBet links to place bets on Kalshi and Polymarket in Telegram.</p>
       <p><a href="https://t.me/okdotbet_bot">🤖 Telegram</a> · <a href="https://tryokbet.com/">🌐 Website</a> · <a href="https://docs.tryokbet.com/">📖 Docs</a> · <a href="https://x.com/tryokbet">𝕏 Twitter</a></p>
+    </td>
+  </tr>
+</table>
+
+## 👥 Contributors
+
+<table>
+  <tr>
+    <td width="100" align="center">
+      <a href="https://x.com/mininghelium1">
+        <img src="https://pbs.twimg.com/profile_images/1853296548395520000/MWnmY-Bt_400x400.jpg" width="60" height="60" style="border-radius: 50%;" alt="@mininghelium1" />
+        <br />
+        <sub><b>@mininghelium1</b></sub>
+      </a>
+    </td>
+    <td>
+      <strong>Ladder Bot & Dump Sniper</strong><br/>
+      Developer of the Polymarket 15-minute up/down betting bots. Built the Ladder Mode arbitrage strategy with exponential tapering and the Dump Sniper for catching volatility dumps with real-time WebSocket price monitoring, auto-hedging, and USD profit tracking.
     </td>
   </tr>
 </table>

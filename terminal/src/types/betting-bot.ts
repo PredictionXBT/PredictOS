@@ -110,6 +110,10 @@ export interface LimitOrderBotRequest {
  */
 export interface LimitOrderBotResponse {
   success: boolean;
+  /** Whether the bot is waiting for the 3-min placement window */
+  waiting?: boolean;
+  /** Seconds until orders will be placed (only present when waiting) */
+  waitSeconds?: number;
   data?: {
     asset: SupportedAsset;
     pricePercent: number;
@@ -124,4 +128,29 @@ export interface LimitOrderBotResponse {
   };
   logs: BotLogEntry[];
   error?: string;
+}
+
+/**
+ * Request body for the sniper-order endpoint
+ * Used for placing single orders by token ID (for dump sniper)
+ */
+export interface SniperOrderRequest {
+  /** The specific token ID to buy (UP or DOWN token) */
+  tokenId: string;
+  /** Price to buy at as decimal (e.g., 0.35 for 35 cents) */
+  price: number;
+  /** Number of shares to buy */
+  shares: number;
+  /** Always "BUY" for sniper strategy */
+  side: "BUY";
+}
+
+/**
+ * Response from the sniper-order endpoint
+ */
+export interface SniperOrderResponse {
+  success: boolean;
+  orderId?: string;
+  error?: string;
+  logs: BotLogEntry[];
 }

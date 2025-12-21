@@ -71,6 +71,24 @@ export interface LadderRungResult {
 }
 
 /**
+ * Ladder order verification result
+ */
+export interface LadderVerificationResult {
+  /** Whether all expected orders are in place */
+  verified: boolean;
+  /** Number of UP orders found on exchange */
+  upOrders: number;
+  /** Number of DOWN orders found on exchange */
+  downOrders: number;
+  /** Expected orders per side */
+  expectedPerSide: number;
+  /** Number of missing UP orders */
+  missingUp: number;
+  /** Number of missing DOWN orders */
+  missingDown: number;
+}
+
+/**
  * Result for a single market's order placement
  */
 export interface MarketOrderResult {
@@ -93,6 +111,8 @@ export interface MarketOrderResult {
   ladderTotalOrders?: number;
   /** Successful orders in ladder mode */
   ladderSuccessfulOrders?: number;
+  /** Ladder order verification result (ladder mode) */
+  ladderVerification?: LadderVerificationResult;
   /** Error message if market processing failed */
   error?: string;
 }
@@ -103,6 +123,10 @@ export interface MarketOrderResult {
 export interface LimitOrderBotResponse {
   /** Whether the request was successful */
   success: boolean;
+  /** Whether the bot is waiting for the 3-min placement window */
+  waiting?: boolean;
+  /** Seconds until orders will be placed (only present when waiting) */
+  waitSeconds?: number;
   /** Response data (only present on success) */
   data?: {
     /** Asset traded */

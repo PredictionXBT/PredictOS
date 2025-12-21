@@ -4,9 +4,9 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { 
-  BarChart3, 
-  Copy, 
+import {
+  BarChart3,
+  Copy,
   ChevronLeft,
   ChevronRight,
   Bot,
@@ -19,6 +19,7 @@ import {
   Coins,
   TrendingUp
 } from "lucide-react";
+import AutoClaimPanel from "./AutoClaimPanel";
 
 interface SidebarProps {
   activeTab: string;
@@ -131,6 +132,11 @@ export function Sidebar({ activeTab }: SidebarProps) {
           );
         })}
       </nav>
+
+      {/* Auto-Claim Panel */}
+      <div className="border-t border-border/50">
+        <AutoClaimPanel collapsed={collapsed} />
+      </div>
 
       {/* Social Links & Version */}
       <div className="p-3 border-t border-border/50">
