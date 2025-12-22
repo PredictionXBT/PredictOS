@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { LimitOrderBotRequest, LimitOrderBotResponse } from "@/types/betting-bot";
+import type { PositionTrackerRequest, PositionTrackerResponse } from "@/types/position-tracker";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000; // 2 seconds between retries
@@ -44,9 +44,8 @@ async function callEdgeFunction(
 }
 
 /**
- * Server-side API route to proxy requests to the Supabase Edge Function (polymarket-up-down-15-markets-limit-order-bot).
+ * Server-side API route to proxy requests to the Supabase Edge Function (polymarket-position-tracker).
  * This keeps the Supabase URL and keys secure on the server.
- * Includes retry logic to handle cold start timeouts.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -64,13 +63,13 @@ export async function POST(request: NextRequest) {
             level: "ERROR",
             message: "Server configuration error: Missing Supabase credentials",
           }],
-        } as LimitOrderBotResponse,
+        } as PositionTrackerResponse,
         { status: 500 }
       );
     }
 
     // Parse request body
-    let body: LimitOrderBotRequest;
+    let body: PositionTrackerRequest;
     try {
       body = await request.json();
     } catch {
@@ -83,7 +82,7 @@ export async function POST(request: NextRequest) {
             level: "ERROR",
             message: "Invalid JSON in request body",
           }],
-        } as LimitOrderBotResponse,
+        } as PositionTrackerResponse,
         { status: 400 }
       );
     }
@@ -99,7 +98,7 @@ export async function POST(request: NextRequest) {
             level: "ERROR",
             message: "Missing required field: asset",
           }],
-        } as LimitOrderBotResponse,
+        } as PositionTrackerResponse,
         { status: 400 }
       );
     }
@@ -116,14 +115,14 @@ export async function POST(request: NextRequest) {
             level: "ERROR",
             message: `Invalid asset: ${body.asset}`,
           }],
-        } as LimitOrderBotResponse,
+        } as PositionTrackerResponse,
         { status: 400 }
       );
     }
 
     // Call the Supabase Edge Function with retry logic
-    const edgeFunctionUrl = process.env.SUPABASE_EDGE_FUNCTION_LIMIT_ORDER_BOT 
-      || `${supabaseUrl}/functions/v1/polymarket-up-down-15-markets-limit-order-bot`;
+    const edgeFunctionUrl = process.env.SUPABASE_EDGE_FUNCTION_POSITION_TRACKER
+      || `${supabaseUrl}/functions/v1/polymarket-position-tracker`;
 
     const { response, isRetry } = await callEdgeFunction(
       edgeFunctionUrl,
@@ -133,9 +132,8 @@ export async function POST(request: NextRequest) {
       },
       {
         asset: body.asset.toUpperCase(),
-        price: body.price,
-        sizeUsd: body.sizeUsd,
-        ladder: body.ladder,
+        marketSlug: body.marketSlug,
+        tokenIds: body.tokenIds,
       }
     );
 
@@ -147,18 +145,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Edge function error (${response.status}): Server returned non-JSON response after ${MAX_RETRIES} attempts. The function may be timing out.`,
+          error: `Edge function error (${response.status}): Server returned non-JSON response after ${MAX_RETRIES} attempts.`,
           logs: [{
             timestamp: new Date().toISOString(),
             level: "ERROR",
             message: `Edge function returned status ${response.status} with non-JSON response`,
           }],
-        } as LimitOrderBotResponse,
+        } as PositionTrackerResponse,
         { status: 502 }
       );
     }
 
-    const data: LimitOrderBotResponse = await response.json();
+    const data: PositionTrackerResponse = await response.json();
 
     // Add a note if we had to retry
     if (isRetry && data.logs) {
@@ -171,7 +169,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error("Error in limit-order-bot API route:", error);
+    console.error("Error in position-tracker API route:", error);
     return NextResponse.json(
       {
         success: false,
@@ -181,8 +179,9 @@ export async function POST(request: NextRequest) {
           level: "ERROR",
           message: error instanceof Error ? error.message : "An unexpected error occurred",
         }],
-      } as LimitOrderBotResponse,
+      } as PositionTrackerResponse,
       { status: 500 }
     );
   }
 }
+

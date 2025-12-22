@@ -74,7 +74,7 @@ A key feature driving adoption is the ability to **stake $PREDICT for attractive
 | Feature | Status | Description | Setup Guide |
 |---------|--------|-------------|-------------|
 | **AI Market Analysis** | ✅ Released | Paste a Kalshi or Polymarket URL and get instant AI-powered analysis with probability estimates, confidence scores, and trading recommendations. Includes **Polyfactual Deep Research** — ask any question and get comprehensive AI-powered answers with citations. | [📖 Setup Guide](docs/features/market-analysis.md) |
-| **Betting Bots** | ✅ Released | Polymarket 15 Minute Up/Down Arbitrage Bot (more bots coming) | [📖 Setup Guide](docs/features/betting-bots.md) |
+| **Betting Bots** | ✅ Released | Polymarket 15 Minute Up/Down Arbitrage Bot — **Vanilla Mode** (single price straddle) and **Ladder Mode** (multi-level tapered allocation for maximized fill rates) | [📖 Setup Guide](docs/features/betting-bots.md) |
 | **Wallet Tracking** | ✅ Released | Real-time order tracking for any Polymarket wallets using Dome SDK WebSockets — 10 seconds faster than hosted bots | [📖 Setup Guide](docs/features/wallet-tracking.md) |
 
 ## 🔮 Coming Soon

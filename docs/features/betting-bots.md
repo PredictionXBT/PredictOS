@@ -4,7 +4,11 @@ This document explains how to configure the environment variables required for t
 
 ## Overview
 
-The Betting Bots feature currently includes the **Polymarket 15 Minute Up/Down Arbitrage Bot**, which automatically places limit orders on Polymarket's 15-minute up/down markets to capture arbitrage opportunities.
+The Betting Bots feature includes the **Polymarket 15 Minute Up/Down Arbitrage Bot**, which automatically places limit orders on Polymarket's 15-minute up/down markets to capture arbitrage opportunities.
+
+**Two modes available:**
+- **Vanilla Mode** — Single price straddle at a fixed probability level
+- **Ladder Mode** — Multi-level orders across a price range with exponentially tapered allocation
 
 > 🚀 More bots coming soon!
 
@@ -29,6 +33,63 @@ This strategy exploits a simple arbitrage opportunity in binary prediction marke
 | "No" wins | $0.48 (Yes) + $0.48 (No) = $0.96 | $1.00 | +$0.04 (~4.2%) |
 
 The bot automates this process every 15 minutes, placing straddle limit orders on both sides of the market to capture this arbitrage when both orders fill.
+
+---
+
+## Ladder Mode
+
+> 📖 Reference: [x.com/hanakoxbt/status/1999149407955308699](https://x.com/hanakoxbt/status/1999149407955308699)
+>
+> 🎬 **Demo by community contributor:** [x.com/mininghelium1/status/2002399561520656424](https://x.com/mininghelium1/status/2002399561520656424)
+
+**Ladder Mode** improves on the vanilla strategy by spreading your bankroll across multiple probability levels with exponentially tapered allocation — heavy at the top, light at the bottom. This approach maximizes fill rates and captures more arbitrage opportunities.
+
+### How It Works
+
+Instead of placing a single straddle at one price (e.g., 48%), Ladder Mode places orders at every probability level from your configured **Top Price** (e.g., 49%) down to your **Bottom Price** (e.g., 35%):
+
+| Price Level | Allocation | Fill Likelihood | Profit if Filled |
+|-------------|------------|-----------------|------------------|
+| 49% | ~25% of bankroll | Most likely | ~2% profit |
+| 48% | ~18% of bankroll | Very likely | ~4% profit |
+| 47% | ~14% of bankroll | Likely | ~6% profit |
+| ... | Tapers down | ... | ... |
+| 35% | ~1% of bankroll | Rare | ~86% profit |
+
+### Why Ladder Mode?
+
+- **Higher fill rates** — Top rungs (49%, 48%) fill frequently for steady, consistent gains
+- **Larger upside** — Lower rungs occasionally fill for much higher profit margins
+- **Better capital efficiency** — Exponential taper concentrates most capital where fills are likely
+- **Automatic rung adjustment** — If your bankroll is too small, the bot automatically reduces the number of rungs to ensure each order meets Polymarket's minimum 5-share requirement
+
+### Configuration Options
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| **Top Price** | Highest probability level (receives most allocation) | 49% |
+| **Bottom Price** | Lowest probability level (receives least allocation) | 35% |
+| **Taper Factor** | Controls allocation curve steepness (1.0 = gentle, 2.5 = aggressive) | 1.5 |
+| **Total Bankroll** | USD amount distributed across all ladder rungs per market | $50 |
+
+### Taper Factor Explained
+
+The taper factor controls how aggressively allocation decreases from top to bottom:
+
+- **1.0 (Gentle)** — More even distribution across all price levels
+- **1.5 (Moderate)** — Balanced approach (recommended)
+- **2.0 (Aggressive)** — Heavy concentration at top prices
+- **2.5 (Very Heavy Top)** — Most conservative, majority at highest fill probability
+
+### Community Credit
+
+Ladder Mode was contributed by the community:
+
+| Contributor | Links |
+|-------------|-------|
+| **Mining helium** | [𝕏 @mininghelium1](https://x.com/mininghelium1) · [GitHub @fciaf420](https://github.com/fciaf420) · [Demo](https://x.com/mininghelium1/status/2002399561520656424) |
+
+---
 
 ## Required Environment Variables
 
@@ -135,13 +196,23 @@ After setting up your environment variables:
 
 ## Bot Parameters
 
-The Polymarket 15 Minute Up/Down Bot accepts the following parameters:
+### Vanilla Mode Parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| Asset Symbol | The cryptocurrency to trade (e.g., BTC, ETH, SOL) | BTC |
-| Bet Amount | Amount in USDC per bet on each side | 25 |
-| Price Threshold | Price target for each side | 0.48 |
+| Asset Symbol | The cryptocurrency to trade (BTC, ETH, SOL, XRP) | BTC |
+| Order Price | Probability level for straddle orders | 48% |
+| Order Size | Amount in USDC per bet on each side | $25 |
+
+### Ladder Mode Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| Asset Symbol | The cryptocurrency to trade (BTC, ETH, SOL, XRP) | BTC |
+| Top Price | Highest probability level (heavy allocation) | 49% |
+| Bottom Price | Lowest probability level (light allocation) | 35% |
+| Taper Factor | Allocation curve steepness (1.0-2.5) | 1.5 |
+| Total Bankroll | Total USD distributed across all rungs | $50 |
 
 ## Troubleshooting
 
