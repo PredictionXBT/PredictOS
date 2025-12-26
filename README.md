@@ -69,7 +69,7 @@ A key feature driving adoption is the ability to **stake $PREDICT for attractive
 
 > 💡 **$PREDICT is more than a token** — it's the core fuel powering adoption, liquidity, and innovation in the live PredictOS framework, establishing it as a leader in decentralized social prediction markets.
 
-## 🎯 Current Features (v1.3.1)
+## 🎯 Current Features (v1.4.1)
 
 | Feature | Status | Description | Setup Guide |
 |---------|--------|-------------|-------------|
