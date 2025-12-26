@@ -271,7 +271,7 @@ const TerminalInput = ({ onSubmit, isLoading, shouldClear }: TerminalInputProps)
         
         {/* Data Provider Toggle - Bottom Right */}
         {detectedUrlType !== 'none' && (
-          <div className="absolute bottom-1 right-14 flex items-center gap-1">
+          <div className="absolute bottom-1 right-4 flex items-center gap-1">
             {detectedUrlType === 'kalshi' ? (
               // Toggle for Kalshi - can switch between Dome and DFlow
               <div className="flex items-center bg-secondary/50 rounded-md border border-border/50 overflow-hidden">
