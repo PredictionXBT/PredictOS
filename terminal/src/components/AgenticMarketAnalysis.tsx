@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import Image from "next/image";
 import { 
   Link2, 
   Plus, 
@@ -17,7 +16,6 @@ import {
   FileText,
   Wrench
 } from "lucide-react";
-import type { DataProvider } from "@/types/api";
 import type { 
   AgentConfig, 
   AggregatorConfig, 
@@ -90,9 +88,8 @@ function generateAgentId(): string {
 }
 
 const AgenticMarketAnalysis = () => {
-  // URL and data provider state
+  // URL state
   const [url, setUrl] = useState("");
-  const [dataProvider, setDataProvider] = useState<DataProvider>("dome");
   
   // Event data state
   const [eventData, setEventData] = useState<{
@@ -247,7 +244,8 @@ const AgenticMarketAnalysis = () => {
     try {
       // Step 1: Fetch event data
       setIsLoadingEvents(true);
-      const effectiveDataProvider = detectedUrlType === 'polymarket' ? 'dome' : dataProvider;
+      // Kalshi uses DFlow, Polymarket uses Dome
+      const effectiveDataProvider = detectedUrlType === 'kalshi' ? 'dflow' : 'dome';
       
       const eventsResponse = await fetch("/api/get-events", {
         method: "POST",
@@ -580,19 +578,13 @@ const AgenticMarketAnalysis = () => {
               Deploy multiple AI agents to analyze prediction markets. Each agent provides independent analysis, then a judge agent synthesizes all perspectives.
             </p>
             <a 
-              href="https://domeapi.io/" 
+              href="https://pond.dflow.net/introduction" 
               target="_blank" 
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 border border-border/50 text-xs text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
             >
-              <Image 
-                src="/dome-icon-light.svg" 
-                alt="Dome" 
-                width={16} 
-                height={16} 
-                className="w-4 h-4"
-              />
-              <span>Powered by Dome</span>
+              <span className="text-violet-400 font-bold">DF</span>
+              <span>Powered by DFlow</span>
             </a>
           </div>
 
@@ -626,36 +618,13 @@ const AgenticMarketAnalysis = () => {
               />
             </div>
             
-            {/* Data Provider Toggle */}
+            {/* Data Provider Display */}
             {detectedUrlType !== 'none' && (
               <div className="absolute bottom-3 right-4 flex items-center gap-1">
                 {detectedUrlType === 'kalshi' ? (
-                  <div className="flex items-center bg-secondary/50 rounded-md border border-border/50 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setDataProvider('dome')}
-                      disabled={isRunning}
-                      className={`px-2 py-0.5 text-[10px] font-mono transition-all ${
-                        dataProvider === 'dome'
-                          ? 'bg-cyan-500/20 text-cyan-400 border-r border-cyan-500/30'
-                          : 'text-muted-foreground hover:text-foreground border-r border-border/50'
-                      }`}
-                    >
-                      Dome
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDataProvider('dflow')}
-                      disabled={isRunning}
-                      className={`px-2 py-0.5 text-[10px] font-mono transition-all ${
-                        dataProvider === 'dflow'
-                          ? 'bg-violet-500/20 text-violet-400'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      DFlow
-                    </button>
-                  </div>
+                  <span className="px-2 py-0.5 text-[10px] font-mono bg-violet-500/20 text-violet-400 rounded-md border border-violet-500/30">
+                    DFlow
+                  </span>
                 ) : (
                   <span className="px-2 py-0.5 text-[10px] font-mono bg-cyan-500/20 text-cyan-400 rounded-md border border-cyan-500/30">
                     Dome

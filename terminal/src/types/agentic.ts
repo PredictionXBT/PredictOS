@@ -61,6 +61,10 @@ export interface MarketAnalysis {
   risks: string[];
   questionAnswer: string;
   analysisSummary: string;
+  /** X (Twitter) post URLs backing the analysis (when x_search tool is used) */
+  xSources?: string[];
+  /** Web URLs (news, articles) backing the analysis (when web_search tool is used) */
+  webSources?: string[];
 }
 
 export interface EventAnalysisAgentResponse {

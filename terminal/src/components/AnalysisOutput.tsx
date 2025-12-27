@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingUp, TrendingDown, Minus, BarChart3 } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, BarChart3, Twitter, Globe } from "lucide-react";
 import type { MarketAnalysis } from "@/types/api";
 
 interface AnalysisOutputProps {
@@ -48,6 +48,16 @@ const AnalysisOutput = ({ analysis, timestamp, marketUrl }: AnalysisOutputProps)
     { type: "divider", content: "─".repeat(50) },
     { type: "recommendation-label", content: "SUMMARY:" },
     { type: "recommendation", content: analysis.analysisSummary },
+    ...(analysis.xSources && analysis.xSources.length > 0 ? [
+      { type: "divider", content: "─".repeat(50) },
+      { type: "section", content: "X SOURCES:" },
+      ...analysis.xSources.map(url => ({ type: "x-source", content: url })),
+    ] : []),
+    ...(analysis.webSources && analysis.webSources.length > 0 ? [
+      { type: "divider", content: "─".repeat(50) },
+      { type: "section", content: "WEB SOURCES:" },
+      ...analysis.webSources.map(url => ({ type: "web-source", content: url })),
+    ] : []),
   ];
 
   useEffect(() => {
@@ -115,6 +125,10 @@ const AnalysisOutput = ({ analysis, timestamp, marketUrl }: AnalysisOutputProps)
         return "text-warning/80 pl-2";
       case "recommendation":
         return "text-foreground font-medium";
+      case "x-source":
+        return "text-cyan-400 pl-2 hover:underline cursor-pointer";
+      case "web-source":
+        return "text-emerald-400 pl-2 hover:underline cursor-pointer";
       default:
         return "text-foreground";
     }
@@ -141,7 +155,29 @@ const AnalysisOutput = ({ analysis, timestamp, marketUrl }: AnalysisOutputProps)
         {allLines.slice(0, displayedLines).map((line, index) => (
           <div key={index} className={`${getLineStyle(line.type)} ${line.type === "verdict" ? "flex items-center gap-2" : ""}`}>
             {line.type === "verdict" && getVerdictIcon()}
-            {line.content}
+            {line.type === "x-source" ? (
+              <a 
+                href={line.content} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 hover:underline"
+              >
+                <Twitter className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate">{line.content}</span>
+              </a>
+            ) : line.type === "web-source" ? (
+              <a 
+                href={line.content} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 hover:underline"
+              >
+                <Globe className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate">{line.content}</span>
+              </a>
+            ) : (
+              line.content
+            )}
           </div>
         ))}
         {displayedLines < allLines.length && (

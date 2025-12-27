@@ -1,3 +1,6 @@
+/** Tool types for source requirements */
+type ToolType = 'x_search' | 'web_search';
+
 /**
  * Generates prompts for analyzing event markets from any prediction market platform.
  * Accepts raw market JSON data (Kalshi, Polymarket, etc.) without normalization.
@@ -6,15 +9,27 @@ export function analyzeEventMarketsPrompt(
     markets: unknown[],
     eventIdentifier: string,
     question: string,
-    pmType: string
+    pmType: string,
+    tools?: ToolType[]
 ): {
     systemPrompt: string;
     userPrompt: string;
 } {
+    const hasXSearch = tools?.includes('x_search');
+    const hasWebSearch = tools?.includes('web_search');
+    // Build tool-specific instructions for system prompt
+    let toolInstructions = '';
+    if (hasXSearch) {
+        toolInstructions += '\nYou have access to X (Twitter) search. Use it to find the latest posts, news, and sentiment about this event. When you find relevant posts that back your analysis, include their URLs in your response.';
+    }
+    if (hasWebSearch) {
+        toolInstructions += '\nYou have access to web search. Use it to find the latest news articles, reports, and analysis about this event. When you find relevant resources that back your analysis, include their URLs in your response.';
+    }
+
     const systemPrompt = `You are a financial analyst expert in the field of prediction markets (posted on ${pmType}) that understands the latest news, events, and market trends.
 Your expertise lies in deeply analyzing prediction markets for a specific event, identifying if there's alpha (mispricing) opportunity, and providing a clear recommendation on which side (YES or NO) is more likely to win based on your analysis.
 You always provide a short analysisSummary of your findings, less than 270 characters, that is very conversational and understandable by a non-expert who just wants to understand which side it might make more sense to buy into.
-
+${toolInstructions}
 Your output is ALWAYS in JSON format and you are VERY STRICT about it. You must return valid JSON that matches the exact schema specified.`;
 
     const userPrompt = `# Task: Deep Analysis of an Event's Prediction Markets
@@ -76,7 +91,9 @@ Return your analysis in JSON format with the following fields. Focus on the SING
   "keyFactors": ["string"] - array of key factors influencing your assessment,
   "risks": ["string"] - array of risks that could affect your prediction,
   "questionAnswer": "string - direct answer to the user's specific query/input/question",
-  "analysisSummary": "string - brief summary of your findings under 270 characters"
+  "analysisSummary": "string - brief summary of your findings under 270 characters"${hasXSearch ? `,
+  "xSources": ["string"] - array of X (Twitter) post URLs that back your analysis (include 2-4 relevant posts)` : ''}${hasWebSearch ? `,
+  "webSources": ["string"] - array of web URLs (news articles, reports, etc.) that back your analysis (include 2-4 relevant resources)` : ''}
 }
 
 ## Important Notes
@@ -90,7 +107,9 @@ Return your analysis in JSON format with the following fields. Focus on the SING
 - Be conservative with confidence scores - only assign high confidence when you have strong evidence
 - Your reasoning should be specific and reference actual trends, news, or data when possible
 - Address the user's query/input/question directly in the questionAnswer field
-- The analysisSummary should be conversational and to-the-point, no hype or emojis
+- The analysisSummary should be conversational and to-the-point, no hype or emojis${hasXSearch ? `
+- IMPORTANT: Include 2-4 relevant X (Twitter) post URLs in xSources that back your analysis - these should be real posts you found via search` : ''}${hasWebSearch ? `
+- IMPORTANT: Include 2-4 relevant web URLs (news articles, reports) in webSources that back your analysis - these should be real resources you found via search` : ''}
 
 Now analyze these markets and provide your assessment. Return your response in the exact JSON format specified above.`;
 

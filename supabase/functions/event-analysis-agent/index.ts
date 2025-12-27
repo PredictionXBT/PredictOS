@@ -98,8 +98,8 @@ Deno.serve(async (req: Request) => {
     const defaultQuestion = "What is the best trading opportunity in this market? Analyze the probability and provide a recommendation.";
     const analysisQuestion = question || defaultQuestion;
 
-    // Build prompt and call AI
-    const { systemPrompt, userPrompt } = analyzeEventMarketsPrompt(markets, eventIdentifier, analysisQuestion, pmType);
+    // Build prompt and call AI (pass tools to include source requirements in prompt)
+    const { systemPrompt, userPrompt } = analyzeEventMarketsPrompt(markets, eventIdentifier, analysisQuestion, pmType, tools);
 
     let aiResponseModel: string;
     let aiTokensUsed: number | undefined;
