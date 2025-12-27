@@ -13,6 +13,7 @@ import type {
   EventAnalysisAgentRequest,
   EventAnalysisAgentResponse,
   MarketAnalysis,
+  GrokTool,
 } from "./types.ts";
 
 // OpenAI model identifiers
@@ -62,7 +63,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { markets, eventIdentifier, pmType, model, question } = requestBody;
+    const { markets, eventIdentifier, pmType, model, question, tools } = requestBody;
 
     // Validate required parameters
     if (!markets || !Array.isArray(markets) || markets.length === 0) {
@@ -132,13 +133,14 @@ Deno.serve(async (req: Request) => {
         .filter((t) => t !== undefined)
         .join("\n");
     } else {
-      console.log("Calling Grok AI with model:", model);
+      console.log("Calling Grok AI with model:", model, "tools:", tools);
       const grokResponse = await callGrokResponses(
         userPrompt,
         systemPrompt,
         "json_object",
         model,
-        3
+        3,
+        tools as GrokTool[] | undefined
       );
       console.log("Grok response received, tokens:", grokResponse.usage?.total_tokens);
 

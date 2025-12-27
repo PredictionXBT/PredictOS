@@ -14,7 +14,8 @@ import {
   Trash2,
   Layers,
   Sparkles,
-  FileText
+  FileText,
+  Wrench
 } from "lucide-react";
 import type { DataProvider } from "@/types/api";
 import type { 
@@ -25,6 +26,7 @@ import type {
   AnalysisAggregatorResponse,
   PmType,
   MarketAnalysis,
+  GrokTool,
 } from "@/types/agentic";
 import AnalysisOutput from "./AnalysisOutput";
 import AggregatedAnalysisOutput from "./AggregatedAnalysisOutput";
@@ -55,6 +57,24 @@ const OPENAI_MODELS: ModelOption[] = [
 
 const ALL_MODELS: ModelOption[] = [...GROK_MODELS, ...OPENAI_MODELS];
 
+// Tool options
+interface ToolOption {
+  value: GrokTool;
+  label: string;
+}
+
+const TOOL_OPTIONS: ToolOption[] = [
+  { value: "x_search", label: "X Search" },
+  { value: "web_search", label: "Web Search" },
+];
+
+/**
+ * Check if a model is an OpenAI model
+ */
+function isOpenAIModel(model: string): boolean {
+  return OPENAI_MODELS.some(m => m.value === model) || model.startsWith("gpt-");
+}
+
 // URL type detection
 type UrlType = 'kalshi' | 'polymarket' | 'none';
 
@@ -83,12 +103,12 @@ const AgenticMarketAnalysis = () => {
   
   // Agent configurations
   const [agents, setAgents] = useState<AgentConfig[]>([
-    { id: generateAgentId(), model: "grok-4-1-fast-reasoning", status: 'idle' }
+    { id: generateAgentId(), model: "", tools: undefined, status: 'idle' }
   ]);
   
   // Aggregator configuration
   const [aggregator, setAggregator] = useState<AggregatorConfig>({
-    model: "grok-4-1-fast-reasoning",
+    model: "",
     status: 'idle'
   });
   
@@ -132,7 +152,7 @@ const AgenticMarketAnalysis = () => {
   const addAgent = () => {
     setAgents(prev => [
       ...prev,
-      { id: generateAgentId(), model: "grok-4-1-fast-reasoning", status: 'idle' }
+      { id: generateAgentId(), model: "", tools: undefined, status: 'idle' }
     ]);
   };
 
@@ -148,8 +168,34 @@ const AgenticMarketAnalysis = () => {
 
   const updateAgentModel = (agentId: string, model: string) => {
     setAgents(prev => prev.map(a => 
-      a.id === agentId ? { ...a, model } : a
+      a.id === agentId ? { 
+        ...a, 
+        model,
+        // Clear tools when switching to OpenAI (tools only work with Grok)
+        tools: isOpenAIModel(model) ? undefined : a.tools 
+      } : a
     ));
+    setOpenDropdown(null);
+  };
+
+  const updateAgentTools = (agentId: string, tool: GrokTool) => {
+    setAgents(prev => prev.map(a => {
+      if (a.id !== agentId) return a;
+      
+      const currentTool = a.tools?.[0];
+      const isSelected = currentTool === tool;
+      
+      // Toggle: if same tool clicked, deselect; otherwise select the new one
+      const newTools: GrokTool[] | undefined = isSelected ? undefined : [tool];
+      
+      // If selecting a tool and current model is OpenAI or empty, switch to Grok
+      let newModel = a.model;
+      if (newTools && (isOpenAIModel(a.model) || !a.model)) {
+        newModel = "grok-4-1-fast-reasoning";
+      }
+      
+      return { ...a, tools: newTools, model: newModel };
+    }));
     setOpenDropdown(null);
   };
 
@@ -173,6 +219,19 @@ const AgenticMarketAnalysis = () => {
   const runAgents = async () => {
     if (!url.trim()) {
       setError("Please enter a prediction market URL");
+      return;
+    }
+
+    // Check if all agents have models selected
+    const agentsWithoutModels = agents.filter(a => !a.model);
+    if (agentsWithoutModels.length > 0) {
+      setError("Please select a model for all agents");
+      return;
+    }
+
+    // Check if aggregator has a model when there are multiple agents
+    if (agents.length > 1 && !aggregator.model) {
+      setError("Please select a model for the aggregator");
       return;
     }
 
@@ -229,6 +288,7 @@ const AgenticMarketAnalysis = () => {
               eventIdentifier: eventsData.eventIdentifier,
               pmType: eventsData.pmType,
               model: agent.model,
+              tools: agent.tools,
             }),
           });
 
@@ -302,12 +362,95 @@ const AgenticMarketAnalysis = () => {
     }
   };
 
+  const renderToolsDropdown = (
+    agentId: string,
+    selectedTools: GrokTool[] | undefined,
+    disabled: boolean,
+    isOpenAI: boolean,
+    zIndex: number
+  ) => {
+    const dropdownId = `tools-${agentId}`;
+    const toolsDisabled = disabled || isOpenAI;
+    const hasTools = selectedTools && selectedTools.length > 0;
+    
+    return (
+      <div 
+        className="relative" 
+        ref={el => { dropdownRefs.current[dropdownId] = el; }}
+        style={{ zIndex: openDropdown === dropdownId ? 1000 : zIndex }}
+      >
+        <button
+          type="button"
+          onClick={() => !toolsDisabled && setOpenDropdown(openDropdown === dropdownId ? null : dropdownId)}
+          disabled={toolsDisabled}
+          title={isOpenAI ? "Tools only work with Grok models" : undefined}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs transition-all font-mono whitespace-nowrap ${
+            toolsDisabled 
+              ? 'bg-secondary/30 border-border/50 text-muted-foreground/50 cursor-not-allowed' 
+              : hasTools
+              ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500'
+              : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
+          }`}
+        >
+          <Wrench className="w-3 h-3" />
+          <span className="hidden sm:inline">
+            {hasTools 
+              ? (selectedTools[0] === 'x_search' ? 'X Search' : 'Web Search')
+              : 'Tools'
+            }
+          </span>
+          <span className="sm:hidden">
+            {hasTools ? (selectedTools[0] === 'x_search' ? 'X' : 'Web') : '-'}
+          </span>
+          <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === dropdownId ? 'rotate-180' : ''}`} />
+        </button>
+        
+        {openDropdown === dropdownId && (
+          <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-lg shadow-xl overflow-hidden" style={{ zIndex: 1000 }}>
+            <div className="px-3 py-2 bg-cyan-500/10 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Wrench className="w-3 h-3 text-cyan-400" />
+                <span className="text-xs font-semibold text-cyan-400">Grok Tools</span>
+              </div>
+            </div>
+            <div className="py-1">
+              {TOOL_OPTIONS.map((tool) => {
+                const isSelected = selectedTools?.includes(tool.value);
+                return (
+                  <button
+                    key={tool.value}
+                    type="button"
+                    onClick={() => updateAgentTools(agentId, tool.value)}
+                    className={`w-full px-4 py-2.5 text-left text-sm font-mono transition-colors flex items-center justify-between ${
+                      isSelected
+                        ? 'bg-cyan-500/20 text-cyan-400'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    }`}
+                  >
+                    <span>{tool.label}</span>
+                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="px-3 py-2 border-t border-border bg-secondary/30">
+              <p className="text-[10px] text-muted-foreground">
+                Tools only work with Grok models
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderModelDropdown = (
     id: string,
     selectedModel: string,
     onSelect: (model: string) => void,
     disabled: boolean,
-    zIndex: number
+    zIndex: number,
+    restrictToGrok: boolean = false
   ) => (
     <div 
       className="relative" 
@@ -318,17 +461,23 @@ const AgenticMarketAnalysis = () => {
         type="button"
         onClick={() => !disabled && setOpenDropdown(openDropdown === id ? null : id)}
         disabled={disabled}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-secondary/50 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-mono whitespace-nowrap"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs transition-all font-mono whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${
+          selectedModel
+            ? 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
+            : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
+        }`}
       >
-        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-          getProviderBadge(selectedModel) === "OpenAI" 
-            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50" 
-            : "bg-orange-500/20 text-orange-400 border border-orange-500/50"
-        }`}>
-          {getProviderBadge(selectedModel)}
-        </span>
-        <span className="hidden sm:inline">{getModelLabel(selectedModel)}</span>
-        <span className="sm:hidden">Model</span>
+        {selectedModel && (
+          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+            getProviderBadge(selectedModel) === "OpenAI" 
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50" 
+              : "bg-orange-500/20 text-orange-400 border border-orange-500/50"
+          }`}>
+            {getProviderBadge(selectedModel)}
+          </span>
+        )}
+        <span className="hidden sm:inline">{selectedModel ? getModelLabel(selectedModel) : 'Models'}</span>
+        <span className="sm:hidden">Models</span>
         <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === id ? 'rotate-180' : ''}`} />
       </button>
       
@@ -361,32 +510,45 @@ const AgenticMarketAnalysis = () => {
             ))}
           </div>
           
-          {/* OpenAI Section */}
-          <div className="px-3 py-2 bg-emerald-500/10 border-y border-border sticky top-0 z-10">
-            <div className="flex items-center gap-2">
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/50">
-                OpenAI
-              </span>
-              <span className="text-xs font-semibold text-emerald-400">GPT Models</span>
+          {/* OpenAI Section - Only show if not restricted to Grok */}
+          {!restrictToGrok && (
+            <>
+              <div className="px-3 py-2 bg-emerald-500/10 border-y border-border sticky top-0 z-10">
+                <div className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/50">
+                    OpenAI
+                  </span>
+                  <span className="text-xs font-semibold text-emerald-400">GPT Models</span>
+                </div>
+              </div>
+              <div className="py-1">
+                {OPENAI_MODELS.map((model) => (
+                  <button
+                    key={model.value}
+                    type="button"
+                    onClick={() => onSelect(model.value)}
+                    className={`w-full px-4 py-2.5 text-left text-sm font-mono transition-colors ${
+                      selectedModel === model.value
+                        ? 'bg-primary/20 text-primary'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    }`}
+                  >
+                    <span className="block">{model.label}</span>
+                    <span className="block text-[10px] opacity-60 mt-0.5">{model.value}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          
+          {/* Info message when restricted to Grok */}
+          {restrictToGrok && (
+            <div className="px-3 py-2 border-t border-border bg-secondary/30">
+              <p className="text-[10px] text-muted-foreground">
+                OpenAI models hidden (tools are enabled)
+              </p>
             </div>
-          </div>
-          <div className="py-1">
-            {OPENAI_MODELS.map((model) => (
-              <button
-                key={model.value}
-                type="button"
-                onClick={() => onSelect(model.value)}
-                className={`w-full px-4 py-2.5 text-left text-sm font-mono transition-colors ${
-                  selectedModel === model.value
-                    ? 'bg-primary/20 text-primary'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                }`}
-              >
-                <span className="block">{model.label}</span>
-                <span className="block text-[10px] opacity-60 mt-0.5">{model.value}</span>
-              </button>
-            ))}
-          </div>
+          )}
         </div>
       )}
     </div>
@@ -572,12 +734,20 @@ const AgenticMarketAnalysis = () => {
                             <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                           </button>
                         )}
+                        {renderToolsDropdown(
+                          agent.id,
+                          agent.tools,
+                          isRunning,
+                          isOpenAIModel(agent.model),
+                          agentZIndex + 51
+                        )}
                         {renderModelDropdown(
                           agent.id,
                           agent.model,
                           (model) => updateAgentModel(agent.id, model),
                           isRunning,
-                          agentZIndex + 50
+                          agentZIndex + 50,
+                          agent.tools && agent.tools.length > 0
                         )}
                         {agents.length > 1 && (
                           <button
@@ -689,7 +859,7 @@ const AgenticMarketAnalysis = () => {
           {/* Run Button */}
           <button
             onClick={runAgents}
-            disabled={isRunning || !url.trim()}
+            disabled={isRunning || !url.trim() || agents.some(a => !a.model) || (agents.length > 1 && !aggregator.model)}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-primary/20 border border-primary/50 text-primary font-display text-sm hover:bg-primary/30 hover:border-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed glow-primary"
           >
             {isRunning ? (

@@ -55,6 +55,9 @@ async function fetchWithTimeout(
   }
 }
 
+/** Tool types available for Grok models */
+export type GrokToolType = 'x_search' | 'web_search';
+
 /**
  * Call Grok AI with the Responses API
  * 
@@ -63,6 +66,7 @@ async function fetchWithTimeout(
  * @param responseFormat Response format type (e.g., "json_object")
  * @param model Grok model to use
  * @param maxRetries Maximum number of retries on failure
+ * @param tools Optional array of tools to enable (x_search, web_search)
  * @returns Grok response result
  */
 export async function callGrokResponses(
@@ -71,6 +75,7 @@ export async function callGrokResponses(
   responseFormat: string,
   model: string = "grok-4-1-fast-reasoning",
   maxRetries: number = 3,
+  tools?: GrokToolType[],
 ): Promise<GrokResponseResult> {
   const apiKey = Deno.env.get("XAI_API_KEY");
   if (!apiKey) {
@@ -89,11 +94,9 @@ export async function callGrokResponses(
         content: message,
       },
     ],
-    tools: [
-      {
-        type: "x_search",
-      },
-    ],
+    ...(tools && tools.length > 0 && {
+      tools: tools.map(tool => ({ type: tool })),
+    }),
     response_format: {
       type: responseFormat,
     }

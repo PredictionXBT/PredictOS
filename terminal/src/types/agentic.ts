@@ -41,6 +41,7 @@ export interface EventAnalysisAgentRequest {
   pmType: PmType;
   model: string;
   question?: string;
+  tools?: ('x_search' | 'web_search')[];
 }
 
 export interface MarketAnalysis {
@@ -120,9 +121,13 @@ export interface AnalysisAggregatorResponse {
 // Frontend Agent State Types
 // ============================================================================
 
+/** Tool types available for Grok models */
+export type GrokTool = 'x_search' | 'web_search';
+
 export interface AgentConfig {
   id: string;
   model: string;
+  tools?: GrokTool[];
   status: 'idle' | 'running' | 'completed' | 'error';
   result?: MarketAnalysis;
   error?: string;

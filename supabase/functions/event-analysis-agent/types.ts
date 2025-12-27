@@ -5,6 +5,9 @@
 /** Prediction market type */
 export type PmType = 'Kalshi' | 'Polymarket';
 
+/** Tool types available for Grok models */
+export type GrokTool = 'x_search' | 'web_search';
+
 /**
  * Request body for the event-analysis-agent endpoint
  */
@@ -19,6 +22,8 @@ export interface EventAnalysisAgentRequest {
   model: string;
   /** Optional custom question for analysis */
   question?: string;
+  /** Optional tools for Grok models (X Search, Web Search) */
+  tools?: GrokTool[];
 }
 
 /**

@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
         pmType: body.pmType,
         model: body.model,
         question: body.question,
+        tools: body.tools,
       }),
     });
 
