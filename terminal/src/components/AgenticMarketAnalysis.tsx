@@ -21,6 +21,9 @@ import {
   ArrowDown,
   Cpu,
   CircleDot,
+  Coins,
+  DollarSign,
+  AlertCircle,
 } from "lucide-react";
 import Image from "next/image";
 import type { 
@@ -136,11 +139,24 @@ const AgenticMarketAnalysis = () => {
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
   const [expandedAggregator, setExpandedAggregator] = useState(false);
   
+  // Autonomous mode state
+  const [autonomousBudget, setAutonomousBudget] = useState<number>(10);
+  const [autonomousOrderStatus, setAutonomousOrderStatus] = useState<'idle' | 'placing' | 'success' | 'error' | 'skipped'>('idle');
+  const [autonomousOrderResult, setAutonomousOrderResult] = useState<{
+    orderId?: string;
+    side?: string;
+    size?: number;
+    price?: number;
+    costUsd?: number;
+    errorMsg?: string;
+  } | null>(null);
+  
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   
   // Derived state
   const detectedUrlType = useMemo(() => detectUrlType(url), [url]);
   const showAggregator = agents.length > 1;
+  const isAutonomousAvailable = detectedUrlType === 'polymarket'; // Only Polymarket supports autonomous mode
   
   // Check if analysis is complete (at least one agent completed, or aggregator completed if multiple agents)
   const isAnalysisComplete = useMemo(() => {
@@ -296,6 +312,8 @@ const AgenticMarketAnalysis = () => {
     // Reset all statuses
     setAgents(prev => prev.map(a => ({ ...a, status: 'idle', result: undefined, error: undefined })));
     setAggregator(prev => ({ ...prev, status: 'idle', result: undefined, error: undefined }));
+    setAutonomousOrderStatus('idle');
+    setAutonomousOrderResult(null);
 
     try {
       // Step 1: Fetch event data
@@ -437,6 +455,15 @@ const AgenticMarketAnalysis = () => {
           setAggregator(prev => ({ ...prev, status: 'completed', result: aggregatorData.data }));
           setExpandedAggregator(true); // Auto-expand aggregator when done
 
+          // Autonomous mode: Place order based on aggregated recommendation
+          if (analysisMode === 'autonomous' && eventsData.pmType === 'Polymarket' && aggregatorData.data) {
+            await placeAutonomousOrder(
+              aggregatorData.data,
+              eventsData.eventIdentifier,
+              eventsData.markets
+            );
+          }
+
         } catch (aggError) {
           setAggregator(prev => ({ 
             ...prev, 
@@ -444,6 +471,14 @@ const AgenticMarketAnalysis = () => {
             error: aggError instanceof Error ? aggError.message : "Unknown error" 
           }));
         }
+      } else if (completedAnalyses.length === 1 && analysisMode === 'autonomous' && eventsData.pmType === 'Polymarket') {
+        // Single agent autonomous mode: Place order based on agent recommendation
+        const agentResult = completedAnalyses[0].analysis;
+        await placeAutonomousOrder(
+          agentResult,
+          eventsData.eventIdentifier,
+          eventsData.markets
+        );
       }
 
     } catch (err) {
@@ -451,6 +486,115 @@ const AgenticMarketAnalysis = () => {
     } finally {
       setIsRunning(false);
       setIsLoadingEvents(false);
+    }
+  };
+
+  /**
+   * Place an autonomous order on Polymarket based on agent recommendation
+   * Uses Mapper Agent to translate analysis output to Polymarket order parameters
+   */
+  const placeAutonomousOrder = async (
+    analysisResult: MarketAnalysis,
+    marketSlug: string,
+    markets: unknown[]
+  ) => {
+    // Only proceed if there's a buy recommendation
+    if (analysisResult.recommendedAction === "NO TRADE") {
+      setAutonomousOrderStatus('skipped');
+      setAutonomousOrderResult({ errorMsg: "Agents recommend NO TRADE - order not placed" });
+      return;
+    }
+
+    const side = analysisResult.recommendedAction === "BUY YES" ? "YES" : "NO";
+    
+    // Get the first market for data extraction
+    const market = markets[0] as Record<string, unknown>;
+    
+    setAutonomousOrderStatus('placing');
+    setAutonomousOrderResult(null);
+
+    try {
+      // Step 1: Call Mapper Agent to translate analysis to order params
+      console.log("Calling Mapper Agent...");
+      const mapperResponse = await fetch("/api/mapper-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform: "Polymarket",
+          analysisResult: {
+            recommendedAction: analysisResult.recommendedAction,
+            predictedWinner: analysisResult.predictedWinner,
+            winnerConfidence: analysisResult.winnerConfidence,
+            marketProbability: analysisResult.marketProbability,
+            estimatedActualProbability: analysisResult.estimatedActualProbability,
+            ticker: analysisResult.ticker,
+            title: analysisResult.title,
+          },
+          marketData: {
+            conditionId: market.conditionId,
+            slug: marketSlug,
+            clobTokenIds: market.clobTokenIds,
+            outcomes: market.outcomes,
+            outcomePrices: market.outcomePrices,
+            acceptingOrders: market.acceptingOrders,
+            active: market.active,
+            closed: market.closed,
+            minimumTickSize: market.minimumTickSize,
+            negRisk: market.negRisk,
+            title: market.title || market.question,
+          },
+          budgetUsd: autonomousBudget,
+        }),
+      });
+
+      const mapperData = await mapperResponse.json();
+
+      if (!mapperData.success) {
+        setAutonomousOrderStatus('error');
+        setAutonomousOrderResult({
+          errorMsg: mapperData.error || "Mapper Agent failed",
+          side,
+        });
+        return;
+      }
+
+      console.log("Mapper Agent response:", mapperData.data?.orderParams);
+
+      // Step 2: Call polymarket-put-order with mapper output
+      console.log("Placing order via polymarket-put-order...");
+      const orderResponse = await fetch("/api/polymarket-put-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderParams: mapperData.data.orderParams,
+        }),
+      });
+
+      const orderData = await orderResponse.json();
+
+      if (!orderData.success) {
+        setAutonomousOrderStatus('error');
+        setAutonomousOrderResult({
+          errorMsg: orderData.error || "Order placement failed",
+          side,
+        });
+        return;
+      }
+
+      setAutonomousOrderStatus('success');
+      setAutonomousOrderResult({
+        orderId: orderData.data?.order?.orderId,
+        side: mapperData.data?.analysis?.side || side,
+        size: orderData.data?.order?.size,
+        price: orderData.data?.order?.price,
+        costUsd: orderData.data?.order?.costUsd,
+      });
+    } catch (orderError) {
+      setAutonomousOrderStatus('error');
+      setAutonomousOrderResult({
+        errorMsg: orderError instanceof Error ? orderError.message : "Unknown error",
+        side,
+      });
     }
   };
 
@@ -883,6 +1027,46 @@ const AgenticMarketAnalysis = () => {
                   </button>
                 </div>
               </div>
+              
+              {/* Autonomous Mode Budget Input */}
+              {analysisMode === 'autonomous' && (
+                <div className={`flex items-center gap-3 px-3 py-2 rounded-lg ${
+                  isAutonomousAvailable 
+                    ? 'bg-emerald-500/10 border border-emerald-500/30' 
+                    : 'bg-emerald-500/5 border border-emerald-500/20'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <Coins className={`w-4 h-4 ${isAutonomousAvailable ? 'text-emerald-400' : 'text-emerald-400/60'}`} />
+                    <span className={`text-xs font-display ${isAutonomousAvailable ? 'text-emerald-400' : 'text-emerald-400/60'}`}>BUDGET</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`font-mono text-sm ${isAutonomousAvailable ? 'text-emerald-400' : 'text-emerald-400/60'}`}>$</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={autonomousBudget}
+                      onChange={(e) => setAutonomousBudget(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                      disabled={isRunning}
+                      className={`w-16 bg-secondary/50 border rounded px-2 py-1 text-sm font-mono focus:outline-none disabled:opacity-50 ${
+                        isAutonomousAvailable 
+                          ? 'border-emerald-500/30 text-emerald-300 focus:border-emerald-400' 
+                          : 'border-emerald-500/20 text-emerald-300/60 focus:border-emerald-400/50'
+                      }`}
+                    />
+                  </div>
+                  <span className={`text-[10px] ${isAutonomousAvailable ? 'text-emerald-400/70' : 'text-emerald-400/50'}`}>($1 - $100)</span>
+                  <div className="ml-auto flex items-center gap-1.5 text-[10px]">
+                    {isAutonomousAvailable ? (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono">Polymarket</span>
+                    ) : detectedUrlType === 'kalshi' ? (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono">Kalshi - Soon</span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono">Polymarket Only (Kalshi Soon)</span>
+                    )}
+                  </div>
+                </div>
+              )}
               <button
                 onClick={addAgent}
                 disabled={isRunning}
@@ -1379,6 +1563,142 @@ const AgenticMarketAnalysis = () => {
                             <span className="typing-dots">Generating link</span>
                           ) : (
                             'The one-click OkBet links will appear here.'
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Autonomous Order Box - Shows in autonomous mode for Polymarket */}
+              {analysisMode === 'autonomous' && isAutonomousAvailable && (
+                <>
+                  {/* Connector to Order */}
+                  {renderWorkflowConnector(
+                    'okbet', // reusing the amber color scheme
+                    autonomousOrderStatus === 'placing' || isAnalysisComplete,
+                    autonomousOrderStatus === 'success'
+                  )}
+                  
+                  <div 
+                    className={`relative border rounded-lg bg-gradient-to-r from-emerald-500/5 via-green-500/5 to-teal-500/5 backdrop-blur-sm transition-all duration-500 overflow-hidden ${
+                      autonomousOrderStatus === 'success'
+                        ? 'border-emerald-500/70 completion-burst'
+                        : autonomousOrderStatus === 'placing'
+                        ? 'border-emerald-500/50 shimmer'
+                        : autonomousOrderStatus === 'error'
+                        ? 'border-destructive/50'
+                        : autonomousOrderStatus === 'skipped'
+                        ? 'border-amber-500/50'
+                        : 'border-emerald-500/30'
+                    }`}
+                    style={{ zIndex: 5 }}
+                  >
+                    {/* Success effect */}
+                    {autonomousOrderStatus === 'success' && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-transparent to-emerald-500/10 pointer-events-none" 
+                           style={{ animation: 'shimmer 3s infinite' }} />
+                    )}
+                    
+                    <div className="flex items-center justify-between px-4 py-3 relative">
+                      <div className="flex items-center gap-3">
+                        <div className={`relative ${autonomousOrderStatus === 'success' ? 'animate-bounce' : ''}`}
+                             style={{ animationDuration: '2s' }}>
+                          <DollarSign className={`w-5 h-5 transition-all ${
+                            autonomousOrderStatus === 'success' 
+                              ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]' 
+                              : autonomousOrderStatus === 'error'
+                              ? 'text-destructive'
+                              : 'text-emerald-400/70'
+                          }`} />
+                        </div>
+                        <span className={`font-display text-sm transition-colors ${
+                          autonomousOrderStatus === 'success' ? 'text-emerald-300' : 
+                          autonomousOrderStatus === 'error' ? 'text-destructive' : 
+                          autonomousOrderStatus === 'skipped' ? 'text-amber-400' : 'text-emerald-400'
+                        }`}>
+                          Autonomous Order
+                          {autonomousOrderStatus === 'placing' && (
+                            <span className="text-emerald-400/50 text-xs ml-2 typing-dots">placing</span>
+                          )}
+                          {autonomousOrderStatus === 'success' && (
+                            <span className="text-emerald-300/70 text-xs ml-2">executed!</span>
+                          )}
+                          {autonomousOrderStatus === 'error' && (
+                            <span className="text-destructive/70 text-xs ml-2">failed</span>
+                          )}
+                          {autonomousOrderStatus === 'skipped' && (
+                            <span className="text-amber-400/70 text-xs ml-2">skipped</span>
+                          )}
+                        </span>
+                      </div>
+                      
+                      {/* Status indicator */}
+                      {autonomousOrderStatus === 'success' && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <span className="text-[10px] font-display text-emerald-400">ORDER PLACED</span>
+                        </div>
+                      )}
+                      {autonomousOrderStatus === 'placing' && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40">
+                          <Loader2 className="w-3 h-3 text-emerald-400 animate-spin" />
+                          <span className="text-[10px] font-display text-emerald-400">PLACING</span>
+                        </div>
+                      )}
+                      {autonomousOrderStatus === 'skipped' && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-500/20 border border-amber-500/40">
+                          <AlertCircle className="w-3 h-3 text-amber-400" />
+                          <span className="text-[10px] font-display text-amber-400">NO TRADE</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="px-4 pb-4 relative">
+                      {autonomousOrderStatus === 'success' && autonomousOrderResult ? (
+                        <div className="stagger-fade-in space-y-2">
+                          <p className="text-xs text-emerald-400/80">
+                            Order successfully placed on Polymarket!
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                              {autonomousOrderResult.side}
+                            </span>
+                            <span className="px-2 py-1 rounded bg-secondary/50 text-muted-foreground font-mono">
+                              {autonomousOrderResult.size} shares
+                            </span>
+                            <span className="px-2 py-1 rounded bg-secondary/50 text-muted-foreground font-mono">
+                              @ {((autonomousOrderResult.price || 0) * 100).toFixed(1)}%
+                            </span>
+                            <span className="px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                              ${autonomousOrderResult.costUsd?.toFixed(2)}
+                            </span>
+                          </div>
+                          {autonomousOrderResult.orderId && (
+                            <p className="text-[10px] text-muted-foreground font-mono truncate">
+                              Order ID: {autonomousOrderResult.orderId}
+                            </p>
+                          )}
+                        </div>
+                      ) : autonomousOrderStatus === 'error' && autonomousOrderResult ? (
+                        <div className="text-xs text-destructive">
+                          {autonomousOrderResult.errorMsg}
+                        </div>
+                      ) : autonomousOrderStatus === 'skipped' && autonomousOrderResult ? (
+                        <div className="text-xs text-amber-400/80">
+                          {autonomousOrderResult.errorMsg}
+                        </div>
+                      ) : autonomousOrderStatus === 'placing' ? (
+                        <div className="text-xs text-emerald-400/70 shimmer rounded px-2 py-1">
+                          <span className="typing-dots">Placing ${autonomousBudget} order</span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          {isRunning ? (
+                            <span>Waiting for agent analysis to complete...</span>
+                          ) : (
+                            <span>Order will be placed automatically based on agent recommendation (Budget: ${autonomousBudget})</span>
                           )}
                         </div>
                       )}

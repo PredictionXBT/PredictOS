@@ -199,6 +199,7 @@ Deno.serve(async (req: Request) => {
         const response = await getPolymarketMarkets({ slug: eventSlug });
         markets = response.markets;
         console.log(`Found ${markets.length} markets for Polymarket event:`, eventSlug);
+        console.log("Markets:", markets);
       } catch (error) {
         console.error("Failed to fetch Polymarket markets:", error);
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
