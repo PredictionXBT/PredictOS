@@ -13,6 +13,7 @@ import type {
   AnalysisAggregatorRequest,
   AnalysisAggregatorResponse,
   AggregatedAnalysis,
+  X402ResultInput,
 } from "./types.ts";
 
 // OpenAI model identifiers
@@ -62,22 +63,28 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { analyses, eventIdentifier, pmType, model } = requestBody;
+    const { analyses, x402Results, eventIdentifier, pmType, model } = requestBody;
 
     // Validate required parameters
-    if (!analyses || !Array.isArray(analyses) || analyses.length === 0) {
+    const hasAnalyses = analyses && Array.isArray(analyses) && analyses.length > 0;
+    const hasX402Results = x402Results && Array.isArray(x402Results) && x402Results.length > 0;
+    
+    if (!hasAnalyses && !hasX402Results) {
       return new Response(
-        JSON.stringify({ success: false, error: "Missing or invalid 'analyses' parameter" }),
+        JSON.stringify({ success: false, error: "Missing or invalid 'analyses' or 'x402Results' parameter" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (analyses.length < 2) {
+    const totalResults = (analyses?.length || 0) + (x402Results?.length || 0);
+    if (totalResults < 2) {
       return new Response(
-        JSON.stringify({ success: false, error: "Need at least 2 analyses to aggregate" }),
+        JSON.stringify({ success: false, error: "Need at least 2 data sources (analyses + PayAI results) to aggregate" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    console.log(`Aggregating ${analyses?.length || 0} analyses + ${x402Results?.length || 0} PayAI results`);
 
     if (!eventIdentifier) {
       return new Response(
@@ -103,13 +110,13 @@ Deno.serve(async (req: Request) => {
     const useOpenAI = isOpenAIModel(model);
 
     // Build prompt and call AI
-    const agentAnalyses = analyses.map(a => ({
+    const agentAnalyses = (analyses || []).map(a => ({
       agentId: a.agentId,
       model: a.model,
       analysis: a.analysis,
     }));
     
-    const { systemPrompt, userPrompt } = bookmakerAnalysisPrompt(agentAnalyses, eventIdentifier, pmType);
+    const { systemPrompt, userPrompt } = bookmakerAnalysisPrompt(agentAnalyses, x402Results || [], eventIdentifier, pmType);
 
     let aiResponseModel: string;
     let aiTokensUsed: number | undefined;
@@ -206,7 +213,7 @@ Deno.serve(async (req: Request) => {
         processingTimeMs,
         model: aiResponseModel,
         tokensUsed: aiTokensUsed,
-        agentsAggregated: analyses.length,
+        agentsAggregated: totalResults,
       },
     };
 

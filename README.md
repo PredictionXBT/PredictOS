@@ -98,19 +98,22 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 ### Key Features
 
 - **Multi-Model Support** — Mix and match xAI Grok (4.1, 4) and OpenAI GPT (5.2, 5.1, 4.1) models
-- **Tool-Augmented Analysis** — Agents can use X (Twitter) search, Web search, and Polyfactual deep research
+- **Tool-Augmented Analysis** — Agents can use X (Twitter) search, Web search, Polyfactual deep research, and x402/PayAI sellers
 - **Custom Commands** — Direct agent focus with natural language instructions
 - **Real-Time Pipeline Visualization** — Watch agents work through the analysis pipeline
 - **Consensus Metrics** — See how agents agree or disagree on recommendations
 - **Budget Controls** — Set strict limits for autonomous execution (\$1-\$100)
+- **🛡️ Verifiable Agents** — Permanently store agent analysis on [Irys](https://irys.xyz/) blockchain for transparent, verifiable AI predictions
 
 > 📖 **[Full Setup Guide →](docs/features/super-intelligence.md)**
 
-## 🎯 Current Features (v2.0.0)
+## 🎯 Current Features (v2.2.0)
 
 | Feature | Status | Description | Setup Guide |
 |---------|--------|-------------|-------------|
 | **🧠 Super Intelligence** | ✅ Released | Multi-agent AI system with Supervised and Autonomous modes. Deploy multiple AI agents with different models and tools, aggregate insights via Bookmaker Agent, and execute trades automatically or via OkBet. Includes AI-powered market analysis and Polyfactual Deep Research. | [📖 Setup Guide](docs/features/super-intelligence.md) |
+| **🛡️ Verifiable Agents** | ✅ Released | Permanently store agent analysis on [Irys](https://irys.xyz/) blockchain for transparent, verifiable AI predictions. Supports both devnet (free, temporary) and mainnet (permanent). | [📖 Setup Guide](docs/features/verifiable-agents.md) |
+| **💸 x402 / PayAI Integration** | ✅ Released | Access paid AI services and data providers through the x402 protocol. Browse the PayAI bazaar, select sellers, and pay with USDC on Solana or Base. Use as a tool in your Predict Agents. | [📖 Setup Guide](docs/features/x402-integration.md) |
 | **Betting Bots** | ✅ Released | Polymarket 15 Minute Up/Down Arbitrage Bot — **Vanilla Mode** (single price straddle) and **Ladder Mode** (multi-level tapered allocation for maximized fill rates) | [📖 Setup Guide](docs/features/betting-bots.md) |
 | **Wallet Tracking** | ✅ Released | Real-time order tracking for any Polymarket wallets using Dome SDK WebSockets — 10 seconds faster than hosted bots | [📖 Setup Guide](docs/features/wallet-tracking.md) |
 
@@ -118,7 +121,7 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 
 | Feature | Description |
 |---------|-------------|
-| **Agent Battles (x402)** | Pit AI agents against each other to discover winning strategies |
+| **Agent Battles** | Pit AI agents against each other to discover winning strategies |
 | **No Code Builder** | Build trading strategies without writing code |
 | **Whale Tracking** | Automated alerts and analysis for large traders across markets |
 | **Copytrading** | Automatically copy top-performing traders |
@@ -151,10 +154,12 @@ PredictOS/
 │   │   │   │   ├── bookmaker-agent/
 │   │   │   │   ├── event-analysis-agent/
 │   │   │   │   ├── get-events/
+│   │   │   │   ├── irys-upload/        # Verifiable Agents - Irys blockchain upload
 │   │   │   │   ├── mapper-agent/
 │   │   │   │   ├── polyfactual-research/
-│   │   │   │   ├── polymarket-put-order/
-│   │   │   │   └── wallet-tracking/
+        │   │   │   │   ├── polymarket-put-order/
+        │   │   │   │   ├── wallet-tracking/
+        │   │   │   │   └── x402-seller/         # x402/PayAI integration
 │   │   │   ├── market-analysis/     # Super Intelligence UI
 │   │   │   ├── betting-bots/        # Betting Bots UI
 │   │   │   └── wallet-tracking/     # Wallet Tracking UI
@@ -162,6 +167,9 @@ PredictOS/
 │   │   │   ├── AgenticMarketAnalysis.tsx   # Super Intelligence component
 │   │   │   ├── BettingBotTerminal.tsx
 │   │   │   └── WalletTrackingTerminal.tsx
+│   │   ├── lib/                     # Utility libraries
+│   │   │   ├── irys.ts              # Irys blockchain integration
+│   │   │   └── utils.ts
 │   │   └── types/                   # TypeScript definitions
 │   └── public/                      # Static assets
 │
@@ -181,13 +189,17 @@ PredictOS/
         │   │   ├── endpoints.ts
         │   │   └── types.ts
         │   ├── polyfactual/         # Polyfactual Research client
-        │   └── polymarket/          # Polymarket trading client
+        │   ├── polymarket/          # Polymarket trading client
+        │   └── x402/                # x402/PayAI protocol client
+        │       ├── client.ts        # Bazaar discovery & payment handling
+        │       └── types.ts
         ├── get-events/              # Fetch market data from URL
         ├── event-analysis-agent/    # Individual agent analysis
         ├── bookmaker-agent/         # Multi-agent aggregator
         ├── mapper-agent/            # Analysis-to-order translator
         ├── polymarket-put-order/    # Order execution
         ├── polyfactual-research/    # Deep research endpoint
+        ├── x402-seller/             # x402/PayAI bazaar & seller calls
         └── polymarket-up-down-.../  # Betting bot endpoint
 ```
 
@@ -324,6 +336,8 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
 - [Dome API](https://domeapi.io/) — Polymarket data & trading
 - [xAI Grok](https://x.ai/) — xAI's reasoning models (Grok 4, Grok 4.1)
 - [OpenAI GPT](https://openai.com/) — OpenAI's language models (GPT-4.1, GPT-5)
+- [Irys](https://irys.xyz/) — Permanent blockchain storage for Verifiable Agents
+- [x402 / PayAI](https://www.payai.network/) — HTTP 402 payment protocol for paid AI services
 
 ## 🤝 Partners
 
@@ -364,8 +378,8 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
     <td>
       <h3><a href="https://irys.xyz/">IRYS</a></h3>
       <p><strong>The high-performance datachain unifying storage and native smart contract execution.</strong></p>
-      <p>🔗 PredictOS will use IRYS as the data layer for prediction market agents and platforms.</p>
-      <p><a href="https://irys.xyz/">🌐 Website</a> · <a href="https://x.com/irys_xyz">𝕏 Twitter</a></p>
+      <p>🔗 PredictOS integrates IRYS to power <strong>Verifiable Agents</strong> — permanently storing all agent analysis, recommendations, and execution results on the blockchain for transparent, auditable AI predictions. This creates an immutable record of agent decisions that anyone can verify.</p>
+      <p><a href="https://irys.xyz/">🌐 Website</a> · <a href="https://docs.irys.xyz/">📖 Docs</a> · <a href="https://x.com/irys_xyz">𝕏 Twitter</a></p>
     </td>
   </tr>
   <tr>
@@ -405,6 +419,19 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
       <p><strong>Building AI tools for investors, traders, developers, and institutions — DeFAI.</strong> Hey Anon is launching Pandora, a fully permissionless prediction market where users can create their own markets and earn fees.</p>
       <p>🔗 PredictOS is partnering with Hey Anon to integrate Pandora and bring Alpha Terminal insights to permissionless markets — together we're building the future of decentralized prediction markets.</p>
       <p><a href="https://heyanon.ai/">🌐 Website</a> · <a href="https://x.com/HeyAnonai">𝕏 Twitter</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="120" align="center">
+      <a href="https://www.payai.network/">
+        <img src="https://www.payai.network/icon.svg" alt="PayAI" width="80" height="80" />
+      </a>
+    </td>
+    <td>
+      <h3><a href="https://www.payai.network/">PayAI (x402)</a></h3>
+      <p><strong>The HTTP 402 payment protocol for AI agents.</strong> PayAI enables seamless machine-to-machine payments using the x402 protocol, allowing AI agents to pay for API calls and services automatically with USDC on Solana or Base.</p>
+      <p>🔗 PredictOS integrates PayAI to power the <strong>x402 Tool</strong> in Super Intelligence — enabling agents to discover and call paid AI services from the PayAI bazaar with automatic payment handling. Browse sellers, select services, and let your agents pay for premium data and analysis.</p>
+      <p><a href="https://www.payai.network/">🌐 Website</a> · <a href="https://docs.payai.network/">📖 Docs</a> · <a href="https://x.com/AskPayAI">𝕏 Twitter</a></p>
     </td>
   </tr>
 </table>

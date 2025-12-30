@@ -12,15 +12,12 @@ import {
   Bot,
   Blocks,
   Globe,
-  Swords,
   Wand2,
   Fish,
   ArrowLeftRight,
   Coins,
   TrendingUp,
-  Eye,
-  ShieldCheck,
-  Plug
+  Eye
 } from "lucide-react";
 
 interface SidebarProps {
@@ -31,8 +28,6 @@ const navItems = [
   { id: "analysis", label: "Predict Super Intelligence", icon: BarChart3, available: true, href: "/market-analysis" },
   { id: "betting-bots", label: "Betting Bots", icon: Bot, available: true, href: "/betting-bots" },
   { id: "wallet-tracking", label: "Wallet Tracking", icon: Eye, available: true, href: "/wallet-tracking" },
-  { id: "agent-verifiability", label: "Agent Verifiability", icon: ShieldCheck, available: false },
-  { id: "x402-integration", label: "x402 Integration", icon: Plug, available: false },
   { id: "no-code-builder", label: "No Code Builder", icon: Wand2, available: false },
   { id: "whale-tracking", label: "Whale Tracking", icon: Fish, available: false },
   { id: "copytrading", label: "Copytrading", icon: Copy, available: false },
@@ -259,7 +254,7 @@ export function Sidebar({ activeTab }: SidebarProps) {
           
           {/* Version Tag */}
           <span className="text-[10px] px-2 py-0.5 rounded bg-success/20 text-success border border-success font-mono font-bold">
-            v2.0.0
+            v2.2.0
           </span>
         </div>
       </div>

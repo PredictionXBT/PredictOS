@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { 
+import {
   Link2, 
   Plus, 
   Play, 
@@ -24,6 +24,8 @@ import {
   Coins,
   DollarSign,
   AlertCircle,
+  ShieldCheck,
+  Upload,
 } from "lucide-react";
 import Image from "next/image";
 import type { 
@@ -37,7 +39,14 @@ import type {
   GrokTool,
   AgentTool,
   PolyfactualResearchResult,
+  IrysUploadStatus,
+  IrysAgentData,
+  X402SellerConfig,
 } from "@/types/agentic";
+import type { X402SellerInfo, CallSellerResponse } from "@/types/x402";
+import { DEFAULT_X402_NETWORK } from "@/types/x402";
+import X402SellerModal from "./X402SellerModal";
+import { generateRequestId, formatCombinedAnalysisForUpload, type IrysUploadResult } from "@/lib/irys";
 import type { PolyfactualResearchResponse } from "@/types/polyfactual";
 import AnalysisOutput from "./AnalysisOutput";
 import AggregatedAnalysisOutput from "./AggregatedAnalysisOutput";
@@ -78,6 +87,7 @@ interface ToolOption {
 const TOOL_OPTIONS: ToolOption[] = [
   { value: "x_search", label: "X Search", grokOnly: true },
   { value: "web_search", label: "Web Search", grokOnly: true },
+  { value: "x402", label: "PayAI sellers (x402)", grokOnly: false },
   { value: "polyfactual", label: "PolyFactual Research", grokOnly: false },
 ];
 
@@ -112,6 +122,9 @@ const AgenticMarketAnalysis = () => {
   // Analysis mode state (supervised = shows OkBet link, autonomous = no OkBet link)
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('supervised');
   
+  // Irys session request ID (generated once per analysis run for tracking)
+  const [irysRequestId, setIrysRequestId] = useState<string>("");
+  
   // Event data state
   const [eventData, setEventData] = useState<{
     eventIdentifier: string;
@@ -131,6 +144,10 @@ const AgenticMarketAnalysis = () => {
     status: 'idle'
   });
   
+  // Global verifiable state (applies to all agents)
+  const [verifiable, setVerifiable] = useState(false);
+  const [irysUploadStatus, setIrysUploadStatus] = useState<IrysUploadStatus>({ status: 'idle' });
+  
   // UI state
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -138,6 +155,9 @@ const AgenticMarketAnalysis = () => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
   const [expandedAggregator, setExpandedAggregator] = useState(false);
+  
+  // PayAI seller modal state
+  const [x402ModalOpen, setX402ModalOpen] = useState<string | null>(null); // agentId when modal is open
   
   // Autonomous mode state
   const [autonomousBudget, setAutonomousBudget] = useState<number>(10);
@@ -150,6 +170,8 @@ const AgenticMarketAnalysis = () => {
     costUsd?: number;
     errorMsg?: string;
   } | null>(null);
+  // Mapper agent data for Irys upload (in autonomous mode)
+  const [mapperAgentData, setMapperAgentData] = useState<Record<string, unknown> | null>(null);
   
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   
@@ -212,6 +234,149 @@ const AgenticMarketAnalysis = () => {
     ]);
   };
 
+  /**
+   * Handle PayAI seller selection from modal
+   */
+  const handleX402SellerSelect = (seller: X402SellerInfo) => {
+    if (!x402ModalOpen) return;
+    
+    const agentId = x402ModalOpen;
+    setAgents(prev => prev.map(a => {
+      if (a.id !== agentId) return a;
+      
+      const x402SellerConfig: X402SellerConfig = {
+        id: seller.id,
+        name: seller.name,
+        priceUsdc: seller.priceUsdc,
+        network: seller.networks[0] || DEFAULT_X402_NETWORK,
+      };
+      
+      return {
+        ...a,
+        tools: ['x402'] as AgentTool[],
+        x402Seller: x402SellerConfig,
+        model: '', // Clear model when x402 is selected
+      };
+    }));
+    setX402ModalOpen(null);
+  };
+
+  /**
+   * Check if agent is using x402 tool
+   */
+  const isX402Agent = (agent: AgentConfig): boolean => {
+    return agent.tools?.includes('x402') === true && !!agent.x402Seller;
+  };
+
+  /**
+   * Upload all agents' data to Irys for permanent verification
+   */
+  const uploadCombinedToIrys = async (
+    completedAgents: AgentConfig[],
+    aggregatorResult: AggregatorConfig | null,
+    mapperData: Record<string, unknown> | null,
+    orderResult: typeof autonomousOrderResult,
+    orderStatus: typeof autonomousOrderStatus,
+    eventInfo: { pmType: PmType; eventIdentifier: string; eventId?: string },
+    requestId: string,
+    mode: AnalysisMode
+  ) => {
+    setIrysUploadStatus({ status: 'uploading' });
+
+    try {
+      // Build agents data array
+      const agentsData: IrysAgentData[] = [];
+
+      // Add Predict Agents
+      completedAgents.forEach((agent, index) => {
+        if (agent.status === 'completed' && agent.result) {
+          agentsData.push({
+            name: `Predict Agent ${index + 1}`,
+            type: 'predict-agent',
+            model: agent.model,
+            tools: agent.tools,
+            userCommand: agent.userCommand,
+            analysis: agent.result,
+            polyfactualResearch: agent.polyfactualResearch,
+          });
+        }
+      });
+
+      // Add Bookmaker Agent if aggregator completed
+      if (aggregatorResult && aggregatorResult.status === 'completed' && aggregatorResult.result) {
+        agentsData.push({
+          name: 'Predict Bookmaker Agent',
+          type: 'bookmaker-agent',
+          model: aggregatorResult.model,
+          analysis: aggregatorResult.result,
+        });
+      }
+
+      // Add Mapper Agent and Execution (in autonomous mode)
+      if (mode === 'autonomous') {
+        if (mapperData) {
+          agentsData.push({
+            name: 'Mapper Agent',
+            type: 'mapper-agent',
+            orderParams: mapperData,
+          });
+        }
+
+        if (orderStatus !== 'idle') {
+          agentsData.push({
+            name: 'Autonomous Execution',
+            type: 'execution',
+            executionResult: {
+              status: orderStatus === 'success' ? 'success' : orderStatus === 'skipped' ? 'skipped' : 'error',
+              orderId: orderResult?.orderId,
+              side: orderResult?.side,
+              size: orderResult?.size,
+              price: orderResult?.price,
+              costUsd: orderResult?.costUsd,
+              errorMsg: orderResult?.errorMsg,
+            },
+          });
+        }
+      }
+
+      const payload = formatCombinedAnalysisForUpload(agentsData, {
+        requestId,
+        pmType: eventInfo.pmType,
+        eventIdentifier: eventInfo.eventIdentifier,
+        eventId: eventInfo.eventId,
+        analysisMode: mode,
+      });
+
+      console.log(`[Irys] Uploading combined data for ${agentsData.length} agents`);
+
+      const response = await fetch("/api/irys-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result: IrysUploadResult = await response.json();
+
+      if (result.success && result.transactionId) {
+        setIrysUploadStatus({
+          status: 'success',
+          transactionId: result.transactionId,
+          gatewayUrl: result.gatewayUrl,
+        });
+        console.log(`[Irys] Combined analysis uploaded: ${result.gatewayUrl}`);
+      } else {
+        throw new Error(result.error || "Upload failed");
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[Irys] Failed to upload combined analysis:`, error);
+      setIrysUploadStatus({
+        status: 'error',
+        error: errorMsg,
+      });
+    }
+  };
+
   const updateAgentCommand = (agentId: string, command: string) => {
     setAgents(prev => prev.map(a => 
       a.id === agentId ? { ...a, userCommand: command } : a
@@ -245,6 +410,13 @@ const AgenticMarketAnalysis = () => {
   };
 
   const updateAgentTools = (agentId: string, tool: AgentTool) => {
+    // Special handling for x402: open seller selection modal
+    if (tool === 'x402') {
+      setX402ModalOpen(agentId);
+      setOpenDropdown(null);
+      return;
+    }
+    
     setAgents(prev => prev.map(a => {
       if (a.id !== agentId) return a;
       
@@ -263,7 +435,8 @@ const AgenticMarketAnalysis = () => {
         newModel = "grok-4-1-fast-reasoning";
       }
       
-      return { ...a, tools: newTools, model: newModel };
+      // Clear PayAI seller if switching away from x402
+      return { ...a, tools: newTools, model: newModel, x402Seller: undefined };
     }));
     setOpenDropdown(null);
   };
@@ -291,15 +464,25 @@ const AgenticMarketAnalysis = () => {
       return;
     }
 
-    // Check if all agents have models selected
-    const agentsWithoutModels = agents.filter(a => !a.model);
+    // Check if all non-x402 agents have models selected
+    const agentsWithoutModels = agents.filter(a => !isX402Agent(a) && !a.model);
     if (agentsWithoutModels.length > 0) {
-      setError("Please select a model for all agents");
+      setError("Please select a model for all agents (or select an PayAI seller)");
       return;
     }
 
-    // Check if aggregator has a model when there are multiple agents
-    if (agents.length > 1 && !aggregator.model) {
+    // Check if x402 agents have commands (required for x402)
+    const x402AgentsWithoutCommand = agents.filter(a => isX402Agent(a) && !a.userCommand?.trim());
+    if (x402AgentsWithoutCommand.length > 0) {
+      setError("Please enter a command for x402 agents (it will be sent as the query)");
+      return;
+    }
+
+    // Count non-x402 agents for aggregator requirement
+    const nonX402Agents = agents.filter(a => !isX402Agent(a));
+    
+    // Check if aggregator has a model when there are multiple non-x402 agents
+    if (nonX402Agents.length > 1 && !aggregator.model) {
       setError("Please select a model for the aggregator");
       return;
     }
@@ -309,11 +492,18 @@ const AgenticMarketAnalysis = () => {
     setExpandedAgents(new Set());
     setExpandedAggregator(false);
     
+    // Generate a new request ID for this analysis session (used for Irys uploads)
+    const newRequestId = generateRequestId();
+    setIrysRequestId(newRequestId);
+    console.log(`[Analysis] Starting with request ID: ${newRequestId}`);
+    
     // Reset all statuses
     setAgents(prev => prev.map(a => ({ ...a, status: 'idle', result: undefined, error: undefined })));
     setAggregator(prev => ({ ...prev, status: 'idle', result: undefined, error: undefined }));
     setAutonomousOrderStatus('idle');
     setAutonomousOrderResult(null);
+    setMapperAgentData(null);
+    setIrysUploadStatus({ status: 'idle' });
 
     try {
       // Step 1: Fetch event data
@@ -343,6 +533,7 @@ const AgenticMarketAnalysis = () => {
 
       // Step 2: Run each agent sequentially
       const completedAnalyses: { agentId: string; model: string; analysis: MarketAnalysis }[] = [];
+      const x402Results: { agentId: string; seller: X402SellerConfig; query: string; response: unknown }[] = [];
       
       for (let i = 0; i < agents.length; i++) {
         const agent = agents[i];
@@ -353,6 +544,54 @@ const AgenticMarketAnalysis = () => {
         ));
 
         try {
+          // Handle x402 agents differently
+          if (isX402Agent(agent) && agent.x402Seller) {
+            console.log(`[x402] Running x402 agent with seller: ${agent.x402Seller.name}`);
+            
+            const x402Response = await fetch("/api/x402-seller", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "call",
+                resourceUrl: agent.x402Seller.id,
+                query: agent.userCommand?.trim() || "",
+                network: agent.x402Seller.network,
+              }),
+            });
+            
+            const x402Data: CallSellerResponse = await x402Response.json();
+            
+            // Update agent with x402 result
+            setAgents(prev => prev.map(a => 
+              a.id === agent.id ? { 
+                ...a, 
+                status: x402Data.success ? 'completed' : 'error',
+                x402Result: {
+                  response: x402Data.data,
+                  query: agent.userCommand || "",
+                  payment: x402Data.metadata ? {
+                    txId: x402Data.metadata.paymentTxId,
+                    cost: x402Data.metadata.costUsdc,
+                    network: x402Data.metadata.network,
+                  } : undefined,
+                },
+                error: x402Data.error,
+              } : a
+            ));
+            
+            if (x402Data.success) {
+              x402Results.push({
+                agentId: agent.id,
+                seller: agent.x402Seller,
+                query: agent.userCommand || "",
+                response: x402Data.data,
+              });
+            }
+            
+            continue; // Skip regular agent processing
+          }
+          
+          // Regular AI agent processing
           // Filter out polyfactual from tools (it's handled separately)
           const grokTools = agent.tools?.filter(t => t === 'x_search' || t === 'web_search') as GrokTool[] | undefined;
           const hasPolyfactual = agent.tools?.includes('polyfactual');
@@ -432,9 +671,30 @@ const AgenticMarketAnalysis = () => {
           ));
         }
       }
+      
+      // Log x402 results for debugging
+      if (x402Results.length > 0) {
+        console.log(`[x402] ${x402Results.length} x402 agent(s) completed`);
+      }
 
-      // Step 3: Run aggregator if more than one agent completed successfully
-      if (completedAnalyses.length >= 2) {
+      // Truncate x402 results to 3000 chars each for bookmaker
+      const truncatedX402Results = x402Results.map(result => {
+        const responseStr = typeof result.response === 'string' 
+          ? result.response 
+          : JSON.stringify(result.response);
+        const truncatedResponse = responseStr.length > 3000 
+          ? responseStr.substring(0, 3000) + '... [truncated]' 
+          : responseStr;
+        return {
+          ...result,
+          response: truncatedResponse,
+          seller: result.seller?.name || 'PayAI Seller',
+        };
+      });
+
+      // Step 3: Run aggregator if we have multiple results (agents or x402)
+      const totalResults = completedAnalyses.length + x402Results.length;
+      if (totalResults >= 2 || (completedAnalyses.length >= 1 && x402Results.length >= 1)) {
         setAggregator(prev => ({ ...prev, status: 'running' }));
 
         try {
@@ -443,6 +703,7 @@ const AgenticMarketAnalysis = () => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               analyses: completedAnalyses,
+              x402Results: truncatedX402Results,
               eventIdentifier: eventsData.eventIdentifier,
               pmType: eventsData.pmType,
               model: aggregator.model,
@@ -482,6 +743,45 @@ const AgenticMarketAnalysis = () => {
           eventsData.eventIdentifier,
           eventsData.markets
         );
+      }
+
+      // Upload to Irys if verifiable is enabled
+      // Note: We need to get the latest state values after all updates
+      if (verifiable) {
+        // Small delay to ensure state updates have propagated
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Get current state values for upload
+        setAgents(currentAgents => {
+          setAggregator(currentAggregator => {
+            setAutonomousOrderStatus(currentOrderStatus => {
+              setAutonomousOrderResult(currentOrderResult => {
+                setMapperAgentData(currentMapperData => {
+                  // Trigger upload with current state
+                  uploadCombinedToIrys(
+                    currentAgents,
+                    currentAggregator,
+                    currentMapperData,
+                    currentOrderResult,
+                    currentOrderStatus,
+                    { 
+                      pmType: eventsData.pmType!, 
+                      eventIdentifier: eventsData.eventIdentifier!,
+                      eventId: eventsData.eventId 
+                    },
+                    newRequestId,
+                    analysisMode
+                  );
+                  return currentMapperData;
+                });
+                return currentOrderResult;
+              });
+              return currentOrderStatus;
+            });
+            return currentAggregator;
+          });
+          return currentAgents;
+        });
       }
 
     } catch (err) {
@@ -563,6 +863,9 @@ const AgenticMarketAnalysis = () => {
 
       console.log("Mapper Agent response:", mapperData.data?.orderParams);
 
+      // Store mapper data for Irys upload
+      setMapperAgentData(mapperData.data?.orderParams || null);
+
       // Step 2: Call polymarket-put-order with mapper output
       console.log("Placing order via polymarket-put-order...");
       const orderResponse = await fetch("/api/polymarket-put-order", {
@@ -615,6 +918,7 @@ const AgenticMarketAnalysis = () => {
       case 'x_search': return 'X';
       case 'web_search': return 'Web';
       case 'polyfactual': return 'PF';
+      case 'x402': return 'x402';
       default: return tool;
     }
   };
@@ -624,10 +928,12 @@ const AgenticMarketAnalysis = () => {
     selectedTools: AgentTool[] | undefined,
     disabled: boolean,
     isOpenAI: boolean,
-    zIndex: number
+    zIndex: number,
+    x402Seller?: X402SellerConfig
   ) => {
     const dropdownId = `tools-${agentId}`;
     const hasTools = selectedTools && selectedTools.length > 0;
+    const hasX402 = hasTools && selectedTools[0] === 'x402' && x402Seller;
     
     return (
       <div 
@@ -642,6 +948,8 @@ const AgenticMarketAnalysis = () => {
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs transition-all font-mono whitespace-nowrap ${
             disabled 
               ? 'bg-secondary/30 border-border/50 text-muted-foreground/50 cursor-not-allowed' 
+              : hasX402
+              ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 hover:bg-cyan-500/30'
               : hasTools
               ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500'
               : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
@@ -649,11 +957,16 @@ const AgenticMarketAnalysis = () => {
         >
           <Wrench className="w-3 h-3" />
           <span className="hidden sm:inline">
-            {hasTools ? getToolLabel(selectedTools[0]) : 'Tools'}
+            {hasX402 ? x402Seller.name : hasTools ? getToolLabel(selectedTools[0]) : 'Tools'}
           </span>
           <span className="sm:hidden">
-            {hasTools ? getToolShortLabel(selectedTools[0]) : '-'}
+            {hasX402 ? 'x402' : hasTools ? getToolShortLabel(selectedTools[0]) : '-'}
           </span>
+          {hasX402 && (
+            <span className="px-1 py-0.5 rounded text-[8px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              {x402Seller.priceUsdc}
+            </span>
+          )}
           <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === dropdownId ? 'rotate-180' : ''}`} />
         </button>
         
@@ -816,6 +1129,297 @@ const AgenticMarketAnalysis = () => {
       )}
     </div>
   );
+
+  /**
+   * Render x402 response data in a human-readable format with sneak peek (first 5000 chars)
+   */
+  const renderX402Response = (response: unknown): React.ReactNode => {
+    if (response === null || response === undefined) {
+      return <span className="text-muted-foreground italic">No data returned</span>;
+    }
+    
+    // Convert response to string to check size
+    const responseStr = typeof response === 'string' ? response : JSON.stringify(response, null, 2);
+    const isTruncated = responseStr.length > 5000;
+    
+    // Handle string responses
+    if (typeof response === 'string') {
+      const displayStr = isTruncated ? response.substring(0, 5000) : response;
+      return (
+        <div>
+          <p className="text-sm text-foreground whitespace-pre-wrap">{displayStr}</p>
+          {isTruncated && (
+            <div className="mt-2 text-xs text-amber-400 font-mono">
+              ... truncated ({responseStr.length.toLocaleString()} chars total, showing first 5,000)
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    // Handle number/boolean responses
+    if (typeof response === 'number' || typeof response === 'boolean') {
+      return <span className="text-sm text-foreground font-mono">{String(response)}</span>;
+    }
+    
+    // Handle array responses - show first few items as sneak peek
+    if (Array.isArray(response)) {
+      if (response.length === 0) {
+        return <span className="text-muted-foreground italic">Empty array</span>;
+      }
+      
+      // Calculate how many items to show based on 5000 char limit
+      let charCount = 0;
+      let itemsToShow = 0;
+      for (const item of response) {
+        const itemStr = JSON.stringify(item);
+        if (charCount + itemStr.length > 5000 && itemsToShow > 0) break;
+        charCount += itemStr.length;
+        itemsToShow++;
+      }
+      
+      const displayItems = response.slice(0, Math.max(itemsToShow, 3)); // Show at least 3 items
+      const remainingItems = response.length - displayItems.length;
+      
+      return (
+        <div className="space-y-2">
+          <div className="text-xs text-muted-foreground mb-2">
+            Showing {displayItems.length} of {response.length} items (sneak peek - first ~5,000 chars)
+          </div>
+          {displayItems.map((item, index) => (
+            <div key={index} className="p-2 rounded-md bg-secondary/20 border border-border/30">
+              <div className="text-[10px] text-muted-foreground mb-1 font-mono">Item {index + 1}</div>
+              {renderX402ResponseItem(item)}
+            </div>
+          ))}
+          {remainingItems > 0 && (
+            <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono">
+              + {remainingItems} more item{remainingItems > 1 ? 's' : ''} not shown...
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    // Handle object responses
+    if (typeof response === 'object') {
+      const objStr = JSON.stringify(response, null, 2);
+      if (objStr.length > 5000) {
+        return (
+          <div>
+            {renderX402ResponseObject(response as Record<string, unknown>)}
+            <div className="mt-2 text-xs text-amber-400 font-mono">
+              Note: Response truncated for display ({objStr.length.toLocaleString()} chars total)
+            </div>
+          </div>
+        );
+      }
+      return renderX402ResponseObject(response as Record<string, unknown>);
+    }
+    
+    // Fallback: JSON stringify with truncation
+    const displayStr = isTruncated ? responseStr.substring(0, 5000) : responseStr;
+    return (
+      <div>
+        <pre className="text-xs text-foreground font-mono whitespace-pre-wrap overflow-x-auto">
+          {displayStr}
+        </pre>
+        {isTruncated && (
+          <div className="mt-2 text-xs text-amber-400 font-mono">
+            ... truncated ({responseStr.length.toLocaleString()} chars total, showing first 5,000)
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /**
+   * Render a single item from x402 response (for arrays)
+   */
+  const renderX402ResponseItem = (item: unknown): React.ReactNode => {
+    if (typeof item === 'string') {
+      return <p className="text-sm text-foreground">{item}</p>;
+    }
+    if (typeof item === 'object' && item !== null) {
+      return renderX402ResponseObject(item as Record<string, unknown>);
+    }
+    return <span className="text-sm text-foreground font-mono">{String(item)}</span>;
+  };
+
+  /**
+   * Render an object from x402 response with nice formatting
+   */
+  const renderX402ResponseObject = (obj: Record<string, unknown>): React.ReactNode => {
+    const entries = Object.entries(obj);
+    
+    if (entries.length === 0) {
+      return <span className="text-muted-foreground italic">Empty object</span>;
+    }
+    
+    // Check if this looks like a news item or article
+    const isNewsItem = 'title' in obj || 'headline' in obj || 'summary' in obj;
+    
+    if (isNewsItem) {
+      const title = obj.title || obj.headline;
+      const summary = obj.summary;
+      const description = obj.description;
+      const content = obj.content;
+      const source = obj.source;
+      const date = obj.date;
+      const publishedAt = obj.published_at;
+      const url = obj.url;
+      
+      return (
+        <div className="space-y-2">
+          {title !== undefined && title !== null && (
+            <h4 className="font-display text-sm text-foreground">
+              {String(title)}
+            </h4>
+          )}
+          {summary !== undefined && summary !== null && (
+            <p className="text-xs text-muted-foreground">{String(summary)}</p>
+          )}
+          {description !== undefined && description !== null && !summary && (
+            <p className="text-xs text-muted-foreground">{String(description)}</p>
+          )}
+          {content !== undefined && content !== null && (
+            <p className="text-xs text-foreground/80">{String(content)}</p>
+          )}
+          <div className="flex flex-wrap gap-2 text-[10px]">
+            {source !== undefined && source !== null && (
+              <span className="px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+                Source: {String(source)}
+              </span>
+            )}
+            {date !== undefined && date !== null && (
+              <span className="px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+                {String(date)}
+              </span>
+            )}
+            {publishedAt !== undefined && publishedAt !== null && (
+              <span className="px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+                {String(publishedAt)}
+              </span>
+            )}
+            {url !== undefined && url !== null && (
+              <a 
+                href={String(url)} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+              >
+                View →
+              </a>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // Generic object display - check if this object wraps an array (like { news: [...] })
+    // If so, render the array contents directly
+    if (entries.length === 1 && Array.isArray(entries[0][1])) {
+      const [arrayKey, arrayValue] = entries[0];
+      const arr = arrayValue as unknown[];
+      
+      if (arr.length === 0) {
+        return <span className="text-muted-foreground italic">Empty {arrayKey}</span>;
+      }
+      
+      // Calculate how many items to show based on 5000 char limit
+      let charCount = 0;
+      let itemsToShow = 0;
+      for (const item of arr) {
+        const itemStr = JSON.stringify(item);
+        if (charCount + itemStr.length > 5000 && itemsToShow > 0) break;
+        charCount += itemStr.length;
+        itemsToShow++;
+      }
+      
+      const displayItems = arr.slice(0, Math.max(itemsToShow, 3)); // Show at least 3 items
+      const remainingItems = arr.length - displayItems.length;
+      
+      return (
+        <div className="space-y-2">
+          <div className="text-xs text-muted-foreground mb-2">
+            <span className="text-cyan-400 font-mono uppercase">{arrayKey}</span>
+            {' '}- Showing {displayItems.length} of {arr.length} items (first ~5,000 chars)
+          </div>
+          {displayItems.map((item, index) => (
+            <div key={index} className="p-2 rounded-md bg-secondary/20 border border-border/30">
+              <div className="text-[10px] text-muted-foreground mb-1 font-mono">Item {index + 1}</div>
+              {renderX402ResponseItem(item)}
+            </div>
+          ))}
+          {remainingItems > 0 && (
+            <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono">
+              + {remainingItems} more item{remainingItems > 1 ? 's' : ''} not shown...
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    // Generic object display for other objects
+    return (
+      <div className="space-y-1.5">
+        {entries.map(([key, value]) => (
+          <div key={key} className="flex flex-col gap-0.5">
+            <span className="text-[10px] text-cyan-400/70 font-mono uppercase">{key.replace(/_/g, ' ')}</span>
+            <div className="text-sm text-foreground pl-2 border-l border-cyan-500/20">
+              {typeof value === 'object' && value !== null
+                ? Array.isArray(value)
+                  ? value.length > 0
+                    ? renderX402ArrayPreview(value, key)
+                    : <span className="text-muted-foreground italic">Empty</span>
+                  : renderX402ResponseObject(value as Record<string, unknown>)
+                : typeof value === 'string' && value.startsWith('http')
+                  ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline truncate block">{value}</a>
+                  : <span className={value === null ? 'text-muted-foreground italic' : ''}>{value === null ? 'null' : String(value)}</span>
+              }
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+  
+  /**
+   * Render an array preview with first few items
+   */
+  const renderX402ArrayPreview = (arr: unknown[], key: string): React.ReactNode => {
+    // Calculate how many items to show (limit chars)
+    let charCount = 0;
+    let itemsToShow = 0;
+    for (const item of arr) {
+      const itemStr = JSON.stringify(item);
+      if (charCount + itemStr.length > 3000 && itemsToShow > 0) break;
+      charCount += itemStr.length;
+      itemsToShow++;
+    }
+    
+    const displayItems = arr.slice(0, Math.max(itemsToShow, 2));
+    const remainingItems = arr.length - displayItems.length;
+    
+    return (
+      <div className="space-y-2 mt-1">
+        <div className="text-[10px] text-muted-foreground">
+          Showing {displayItems.length} of {arr.length} items
+        </div>
+        {displayItems.map((item, index) => (
+          <div key={index} className="p-2 rounded-md bg-secondary/20 border border-border/30">
+            <div className="text-[10px] text-muted-foreground mb-1 font-mono">Item {index + 1}</div>
+            {renderX402ResponseItem(item)}
+          </div>
+        ))}
+        {remainingItems > 0 && (
+          <div className="text-[10px] text-amber-400 font-mono">
+            + {remainingItems} more...
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderAgentStatus = (status: AgentConfig['status']) => {
     switch (status) {
@@ -1059,6 +1663,24 @@ const AgenticMarketAnalysis = () => {
                 <h3 className={`font-display text-sm transition-colors ${
                   isRunning ? 'text-primary' : 'text-muted-foreground'
                 }`}>PREDICT AGENTS</h3>
+                
+                {/* Verifiable Checkbox */}
+                <button
+                  type="button"
+                  onClick={() => !isRunning && setVerifiable(!verifiable)}
+                  disabled={isRunning}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-[10px] font-mono transition-all ${
+                    verifiable
+                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30'
+                      : 'bg-secondary/30 border-border/50 text-muted-foreground hover:border-emerald-500/30 hover:text-emerald-400/70'
+                  } ${isRunning ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  title={verifiable ? "Analysis will be uploaded to Irys for permanent verification" : "Enable to upload analysis to Irys blockchain"}
+                >
+                  <ShieldCheck className={`w-3.5 h-3.5 ${verifiable ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+                  <span>Verifiable</span>
+                  {verifiable && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
+                </button>
+                
                 {/* Mode Toggle */}
                 <div className="flex items-center bg-secondary/50 rounded-md border border-border/50 overflow-hidden">
                   <button
@@ -1270,6 +1892,8 @@ const AgenticMarketAnalysis = () => {
               {agents.map((agent, index) => {
                 const isExpanded = expandedAgents.has(agent.id);
                 const hasResult = agent.status === 'completed' && agent.result;
+                const hasX402Result = agent.status === 'completed' && agent.x402Result;
+                const hasAnyResult = hasResult || hasX402Result;
                 // Higher index agents get lower z-index so dropdowns from earlier agents appear on top
                 const agentZIndex = 100 - index;
                 const isCurrentlyRunning = agent.status === 'running';
@@ -1354,13 +1978,17 @@ const AgenticMarketAnalysis = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           {/* Expand Analysis Button - Only show when completed */}
-                          {hasResult && (
+                          {hasAnyResult && (
                             <button
                               onClick={() => toggleAgentExpanded(agent.id)}
-                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-success/10 border border-success/30 text-success text-xs font-display hover:bg-success/20 hover:border-success/50 transition-all stagger-fade-in"
+                              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-display transition-all stagger-fade-in ${
+                                hasX402Result 
+                                  ? 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/50'
+                                  : 'bg-success/10 border border-success/30 text-success hover:bg-success/20 hover:border-success/50'
+                              }`}
                             >
                               <FileText className="w-3 h-3" />
-                              <span className="hidden sm:inline">Agent&apos;s Analysis</span>
+                              <span className="hidden sm:inline">{hasX402Result ? 'Seller Response' : 'Agent\'s Analysis'}</span>
                               <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                             </button>
                           )}
@@ -1369,9 +1997,11 @@ const AgenticMarketAnalysis = () => {
                             agent.tools,
                             isRunning,
                             isOpenAIModel(agent.model),
-                            agentZIndex + 51
+                            agentZIndex + 51,
+                            agent.x402Seller
                           )}
-                          {renderModelDropdown(
+                          {/* Hide model dropdown when x402 is selected */}
+                          {!isX402Agent(agent) && renderModelDropdown(
                             agent.id,
                             agent.model,
                             (model) => updateAgentModel(agent.id, model),
@@ -1384,7 +2014,7 @@ const AgenticMarketAnalysis = () => {
                       </div>
                       
                       {/* Command Input Box */}
-                      {!hasResult && (
+                      {!hasAnyResult && (
                         <div className="px-4 pb-3">
                           <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary/30 border border-border/50 focus-within:border-primary/50 focus-within:bg-secondary/50 transition-all">
                             <span className="text-primary/60 font-mono text-xs">{">"}</span>
@@ -1392,7 +2022,7 @@ const AgenticMarketAnalysis = () => {
                               type="text"
                               value={agent.userCommand || ""}
                               onChange={(e) => updateAgentCommand(agent.id, e.target.value)}
-                              placeholder="Commands (Optional)"
+                              placeholder={isX402Agent(agent) ? "Query for PayAI seller (required)" : "Commands (Optional)"}
                               disabled={isRunning}
                               className="flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/40 font-mono text-xs disabled:opacity-50"
                             />
@@ -1400,7 +2030,7 @@ const AgenticMarketAnalysis = () => {
                         </div>
                       )}
                       
-                      {/* Expandable Analysis Content */}
+                      {/* Expandable Analysis Content - Regular AI Agent */}
                       {hasResult && isExpanded && (
                         <div className="px-4 pb-4 border-t border-border/50 mt-2 pt-4 stagger-fade-in">
                           <AnalysisOutput
@@ -1408,6 +2038,65 @@ const AgenticMarketAnalysis = () => {
                             timestamp={new Date()}
                             polyfactualResearch={agent.polyfactualResearch}
                           />
+                        </div>
+                      )}
+                      
+                      {/* Expandable x402 Result Content */}
+                      {hasX402Result && isExpanded && agent.x402Result && (
+                        <div className="px-4 pb-4 border-t border-cyan-500/30 mt-2 pt-4 stagger-fade-in">
+                          <div className="space-y-4">
+                            {/* x402 Header */}
+                            <div className="flex items-center gap-2 text-cyan-400">
+                              <Wrench className="w-4 h-4" />
+                              <span className="font-display text-sm">PayAI seller Response</span>
+                              {agent.x402Seller && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/20 border border-cyan-500/30">
+                                  {agent.x402Seller.name}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* Query sent */}
+                            {agent.x402Result.query && (
+                              <div className="space-y-1">
+                                <span className="text-xs text-muted-foreground font-mono">Query:</span>
+                                <div className="p-2 rounded-md bg-secondary/30 border border-border/50">
+                                  <code className="text-xs text-foreground font-mono">{agent.x402Result.query}</code>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Payment info */}
+                            {agent.x402Result.payment && (
+                              <div className="flex items-center gap-4 text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <Coins className="w-3 h-3 text-emerald-400" />
+                                  <span className="text-muted-foreground">Cost:</span>
+                                  <span className="text-emerald-400 font-mono">{agent.x402Result.payment.cost || 'Unknown'}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Layers className="w-3 h-3 text-cyan-400" />
+                                  <span className="text-muted-foreground">Network:</span>
+                                  <span className="text-cyan-400 font-mono">{agent.x402Result.payment.network}</span>
+                                </div>
+                                {agent.x402Result.payment.txId && (
+                                  <div className="flex items-center gap-1.5">
+                                    <Link2 className="w-3 h-3 text-primary" />
+                                    <span className="text-muted-foreground">TX:</span>
+                                    <span className="text-primary font-mono truncate max-w-[100px]">{agent.x402Result.payment.txId}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Response data */}
+                            <div className="space-y-2">
+                              <span className="text-xs text-muted-foreground font-mono">Response:</span>
+                              <div className="p-3 rounded-lg bg-secondary/30 border border-cyan-500/20 max-h-[400px] overflow-y-auto">
+                                {renderX402Response(agent.x402Result.response)}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1834,7 +2523,16 @@ const AgenticMarketAnalysis = () => {
           {/* Run Button */}
           <button
             onClick={runAgents}
-            disabled={isRunning || !url.trim() || agents.some(a => !a.model) || (agents.length > 1 && !aggregator.model)}
+            disabled={
+              isRunning || 
+              !url.trim() || 
+              // Non-x402 agents need a model
+              agents.some(a => !isX402Agent(a) && !a.model) ||
+              // x402 agents need a seller selected (covered by isX402Agent check)
+              agents.some(a => a.tools?.includes('x402') && !a.x402Seller) ||
+              // Multiple non-x402 agents need an aggregator model
+              (agents.filter(a => !isX402Agent(a)).length > 1 && !aggregator.model)
+            }
             className={`relative w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-lg border font-display text-sm transition-all overflow-hidden ${
               isRunning 
                 ? 'bg-primary/10 border-primary/70 text-primary glow-pulse-active cursor-wait' 
@@ -1872,8 +2570,104 @@ const AgenticMarketAnalysis = () => {
               )}
             </div>
           </button>
+
+          {/* Irys Verification Footer - Shows when verifiable is enabled */}
+          {verifiable && (
+            <div className={`mt-6 p-4 rounded-lg border transition-all ${
+              irysUploadStatus.status === 'success'
+                ? 'bg-emerald-500/10 border-emerald-500/50'
+                : irysUploadStatus.status === 'uploading'
+                ? 'bg-blue-500/10 border-blue-500/30'
+                : irysUploadStatus.status === 'error'
+                ? 'bg-destructive/10 border-destructive/30'
+                : 'bg-secondary/30 border-border/50'
+            }`}>
+              <div className="flex items-center gap-3 mb-2">
+                <ShieldCheck className={`w-5 h-5 ${
+                  irysUploadStatus.status === 'success' ? 'text-emerald-400' :
+                  irysUploadStatus.status === 'uploading' ? 'text-blue-400' :
+                  irysUploadStatus.status === 'error' ? 'text-destructive' :
+                  'text-muted-foreground'
+                }`} />
+                <h4 className={`font-display text-sm ${
+                  irysUploadStatus.status === 'success' ? 'text-emerald-400' :
+                  irysUploadStatus.status === 'uploading' ? 'text-blue-400' :
+                  irysUploadStatus.status === 'error' ? 'text-destructive' :
+                  'text-muted-foreground'
+                }`}>
+                  Verifiable Analysis on Irys
+                </h4>
+                {irysUploadStatus.status === 'uploading' && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-500/20 border border-blue-500/40">
+                    <Upload className="w-3 h-3 text-blue-400 animate-pulse" />
+                    <span className="text-[10px] font-display text-blue-400 typing-dots">Uploading</span>
+                  </div>
+                )}
+                {irysUploadStatus.status === 'success' && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    <span className="text-[10px] font-display text-emerald-400">Verified</span>
+                  </div>
+                )}
+                {irysUploadStatus.status === 'error' && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-destructive/20 border border-destructive/40">
+                    <XCircle className="w-3 h-3 text-destructive" />
+                    <span className="text-[10px] font-display text-destructive">Failed</span>
+                  </div>
+                )}
+              </div>
+
+              {irysUploadStatus.status === 'idle' && (
+                <p className="text-xs text-muted-foreground">
+                  Analysis data will be permanently uploaded to Irys blockchain after completion.
+                </p>
+              )}
+
+              {irysUploadStatus.status === 'uploading' && (
+                <p className="text-xs text-blue-400/80">
+                  Uploading all agents&apos; analysis data to Irys for permanent verification...
+                </p>
+              )}
+
+              {irysUploadStatus.status === 'success' && irysUploadStatus.gatewayUrl && (
+                <div className="space-y-3">
+                  <p className="text-xs text-emerald-400/80">
+                    Analysis data has been permanently stored on Irys blockchain.
+                  </p>
+                  <a
+                    href={irysUploadStatus.gatewayUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-3 rounded-md bg-emerald-500/15 border border-emerald-500/50 text-emerald-300 text-sm font-mono hover:bg-emerald-500/25 hover:border-emerald-400 hover:text-emerald-200 transition-all group"
+                  >
+                    <ExternalLink className="w-4 h-4 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                    <span className="truncate">{irysUploadStatus.gatewayUrl}</span>
+                    <ArrowDown className="w-3 h-3 ml-auto rotate-[-90deg] group-hover:translate-x-1 transition-transform" />
+                  </a>
+                  {irysUploadStatus.transactionId && (
+                    <p className="text-[10px] text-muted-foreground font-mono">
+                      Transaction ID: {irysUploadStatus.transactionId}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {irysUploadStatus.status === 'error' && (
+                <p className="text-xs text-destructive">
+                  Failed to upload: {irysUploadStatus.error}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
+      
+      {/* PayAI seller Selection Modal */}
+      <X402SellerModal
+        isOpen={!!x402ModalOpen}
+        onClose={() => setX402ModalOpen(null)}
+        onSelectSeller={handleX402SellerSelect}
+      />
     </div>
   );
 };

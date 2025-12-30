@@ -76,11 +76,27 @@ export interface AggregatedAnalysis extends MarketAnalysis {
 }
 
 /**
+ * PayAI seller result input
+ */
+export interface X402ResultInput {
+  /** Agent identifier that used this seller */
+  agentId: string;
+  /** Name of the PayAI seller */
+  seller: string;
+  /** Query sent to the seller */
+  query: string;
+  /** Response from the seller (truncated to 3000 chars) */
+  response: string;
+}
+
+/**
  * Request body for the bookmaker-agent endpoint
  */
 export interface AnalysisAggregatorRequest {
   /** List of all agent analyses to aggregate */
   analyses: AgentAnalysisInput[];
+  /** List of PayAI seller results to include */
+  x402Results?: X402ResultInput[];
   /** Event identifier (ticker for Kalshi, slug for Polymarket) */
   eventIdentifier: string;
   /** Prediction market type */

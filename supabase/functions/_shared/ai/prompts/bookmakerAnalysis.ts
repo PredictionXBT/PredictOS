@@ -10,8 +10,16 @@ export interface AgentAnalysis {
   analysis: MarketAnalysis;
 }
 
+export interface X402ResultInput {
+  agentId: string;
+  seller: string;
+  query: string;
+  response: string;
+}
+
 export function bookmakerAnalysisPrompt(
   analyses: AgentAnalysis[],
+  x402Results: X402ResultInput[],
   eventIdentifier: string,
   pmType: string
 ): {
@@ -19,12 +27,13 @@ export function bookmakerAnalysisPrompt(
   userPrompt: string;
 } {
   const systemPrompt = `You are a senior financial analyst who specializes in synthesizing multiple expert opinions on prediction markets.
-Your task is to combine and consolidate analyses from multiple AI agents into a single, authoritative assessment.
+Your task is to combine and consolidate analyses from multiple AI agents and external data sources (PayAI sellers) into a single, authoritative assessment.
 You weigh each agent's analysis based on their confidence levels and the consistency of their reasoning.
 When agents disagree, you provide balanced perspective on both sides before making a final recommendation.
+You also incorporate external data from PayAI sellers (news, research, etc.) to inform your assessment.
 Your output is ALWAYS in JSON format and you are VERY STRICT about it. You must return valid JSON that matches the exact schema specified.`;
 
-  const analysesText = analyses.map((a, i) => `
+  const analysesText = analyses.length > 0 ? analyses.map((a, i) => `
 ### Agent ${i + 1}: ${a.model}
 - **Ticker**: ${a.analysis.ticker}
 - **Title**: ${a.analysis.title}
@@ -40,22 +49,41 @@ Your output is ALWAYS in JSON format and you are VERY STRICT about it. You must 
 - **Key Factors**: ${a.analysis.keyFactors.join("; ")}
 - **Risks**: ${a.analysis.risks.join("; ")}
 - **Analysis Summary**: ${a.analysis.analysisSummary}
-`).join("\n");
+`).join("\n") : "(No AI agent analyses provided)";
 
-  const userPrompt = `# Task: Aggregate Multiple Agent Analyses
+  const x402Text = x402Results.length > 0 ? x402Results.map((r, i) => `
+### PayAI Data Source ${i + 1}: ${r.seller}
+- **Query**: ${r.query}
+- **Response Data** (first 3000 chars):
+\`\`\`
+${r.response}
+\`\`\`
+`).join("\n") : "";
 
-You are consolidating analyses from ${analyses.length} AI agents for the ${pmType} event: ${eventIdentifier}
+  const totalSources = analyses.length + x402Results.length;
+  const sourceDescription = [
+    analyses.length > 0 ? `${analyses.length} AI agent${analyses.length > 1 ? 's' : ''}` : '',
+    x402Results.length > 0 ? `${x402Results.length} PayAI data source${x402Results.length > 1 ? 's' : ''}` : ''
+  ].filter(Boolean).join(' and ');
+
+  const userPrompt = `# Task: Aggregate Multiple Data Sources
+
+You are consolidating data from ${sourceDescription} for the ${pmType} event: ${eventIdentifier}
 
 ## Individual Agent Analyses
 ${analysesText}
+${x402Text ? `
+## PayAI External Data Sources
+${x402Text}` : ''}
 
 ## Your Task
 
-Review all agent analyses and create a consolidated assessment that:
-1. **Identifies consensus**: Where do agents agree?
+Review all data sources and create a consolidated assessment that:
+1. **Identifies consensus**: Where do AI agents agree?
 2. **Highlights disagreements**: Where do agents disagree, and what are the arguments on each side?
 3. **Weighs confidence**: Give more weight to high-confidence analyses with strong reasoning
-4. **Synthesizes findings**: Create a final recommendation that accounts for all perspectives
+4. **Incorporates external data**: Use PayAI data sources (news, research, etc.) to inform and validate agent analyses
+5. **Synthesizes findings**: Create a final recommendation that accounts for all perspectives and external data
 
 ## Output Format
 
@@ -92,8 +120,11 @@ Return your consolidated analysis in JSON format:
 - The agentConsensus field helps users understand how aligned the agents were
 - Your reasoning should explicitly mention which agents agreed/disagreed and why
 - Be balanced - don't ignore minority opinions if they have valid points
+- PayAI external data (news, research) should be used to validate and inform agent analyses
+- If external data contradicts agent analyses, note this in your reasoning
+- External data is especially useful for recent events or time-sensitive information
 
-Now consolidate these analyses and provide your synthesized assessment.`;
+Now consolidate all data sources and provide your synthesized assessment.`;
 
   return {
     systemPrompt,

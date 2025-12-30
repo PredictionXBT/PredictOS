@@ -21,12 +21,16 @@ export async function POST(request: NextRequest) {
 
     const body: AnalysisAggregatorRequest = await request.json();
 
-    // Validate required fields
-    if (!body.analyses || !Array.isArray(body.analyses) || body.analyses.length < 2) {
+    // Validate required fields - need at least 2 total data sources (analyses + x402Results)
+    const analysesCount = body.analyses?.length || 0;
+    const x402Count = body.x402Results?.length || 0;
+    const totalSources = analysesCount + x402Count;
+    
+    if (totalSources < 2) {
       return NextResponse.json(
         {
           success: false,
-          error: "Missing required field: analyses (must have at least 2)",
+          error: `Need at least 2 data sources to aggregate (got ${analysesCount} analyses + ${x402Count} PayAI results)`,
         },
         { status: 400 }
       );
@@ -73,7 +77,8 @@ export async function POST(request: NextRequest) {
         apikey: supabaseAnonKey,
       },
       body: JSON.stringify({
-        analyses: body.analyses,
+        analyses: body.analyses || [],
+        x402Results: body.x402Results || [],
         eventIdentifier: body.eventIdentifier,
         pmType: body.pmType,
         model: body.model,

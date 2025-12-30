@@ -104,8 +104,21 @@ export interface AggregatedAnalysis extends MarketAnalysis {
   agentConsensus: AgentConsensus;
 }
 
+/** PayAI seller result for bookmaker aggregation */
+export interface X402ResultInput {
+  /** Agent identifier that used this seller */
+  agentId: string;
+  /** Name of the PayAI seller */
+  seller: string;
+  /** Query sent to the seller */
+  query: string;
+  /** Response from the seller (truncated) */
+  response: string;
+}
+
 export interface AnalysisAggregatorRequest {
-  analyses: AgentAnalysisInput[];
+  analyses?: AgentAnalysisInput[];
+  x402Results?: X402ResultInput[];
   eventIdentifier: string;
   pmType: PmType;
   model: string;
@@ -133,7 +146,19 @@ export interface AnalysisAggregatorResponse {
 export type GrokTool = 'x_search' | 'web_search';
 
 /** Tool types available for all agents (includes non-Grok tools) */
-export type AgentTool = GrokTool | 'polyfactual';
+export type AgentTool = GrokTool | 'polyfactual' | 'x402';
+
+/** PayAI seller info for agent configuration */
+export interface X402SellerConfig {
+  /** Seller ID (resource URL) */
+  id: string;
+  /** Seller display name */
+  name: string;
+  /** Price per call */
+  priceUsdc: string;
+  /** Network to use */
+  network: string;
+}
 
 /** Polyfactual research result to be appended to analysis */
 export interface PolyfactualResearchResult {
@@ -146,12 +171,78 @@ export interface PolyfactualResearchResult {
   query: string;
 }
 
+/** Irys upload status for verifiable analysis */
+export interface IrysUploadStatus {
+  status: 'idle' | 'uploading' | 'success' | 'error';
+  transactionId?: string;
+  gatewayUrl?: string;
+  error?: string;
+}
+
+/** Individual agent data for combined Irys upload */
+export interface IrysAgentData {
+  name: string;
+  type: 'predict-agent' | 'bookmaker-agent' | 'mapper-agent' | 'execution' | 'x402-agent';
+  model?: string;
+  tools?: AgentTool[];
+  userCommand?: string;
+  analysis?: MarketAnalysis | AggregatedAnalysis;
+  polyfactualResearch?: PolyfactualResearchResult;
+  /** For x402 agents */
+  x402Result?: {
+    seller: X402SellerConfig;
+    query: string;
+    response: unknown;
+    payment?: {
+      txId?: string;
+      cost?: string;
+      network: string;
+    };
+  };
+  /** For mapper agent */
+  orderParams?: Record<string, unknown>;
+  /** For execution */
+  executionResult?: {
+    status: 'success' | 'error' | 'skipped';
+    orderId?: string;
+    side?: string;
+    size?: number;
+    price?: number;
+    costUsd?: number;
+    errorMsg?: string;
+  };
+}
+
+/** Combined Irys upload payload for all agents */
+export interface IrysCombinedUploadPayload {
+  requestId: string;
+  timestamp: string;
+  pmType: PmType;
+  eventIdentifier: string;
+  eventId?: string;
+  analysisMode: 'supervised' | 'autonomous';
+  agentsData: IrysAgentData[];
+  schemaVersion: string;
+}
+
 export interface AgentConfig {
   id: string;
   model: string;
   tools?: AgentTool[];
   /** Optional user command to prioritize in the analysis */
   userCommand?: string;
+  /** PayAI seller configuration (when x402 tool is selected) */
+  x402Seller?: X402SellerConfig;
+  /** x402 response data */
+  x402Result?: {
+    response: unknown;
+    query: string;
+    payment?: {
+      txId?: string;
+      cost?: string;
+      network: string;
+    };
+  };
   status: 'idle' | 'running' | 'completed' | 'error';
   result?: MarketAnalysis;
   polyfactualResearch?: PolyfactualResearchResult;
