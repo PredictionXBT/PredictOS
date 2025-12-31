@@ -342,7 +342,7 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
 - [Irys](https://irys.xyz/) — Permanent blockchain storage for Verifiable Agents
 - [x402 / PayAI](https://www.payai.network/) — HTTP 402 payment protocol for paid AI services
 
-## 🤝 Partners
+## 🤝 Partners and Collaborators
 
 <table>
 <tr>
@@ -427,7 +427,7 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
   <tr>
     <td width="120" align="center">
       <a href="https://www.payai.network/">
-        <img src="https://www.payai.network/icon.svg" alt="PayAI" width="80" height="80" />
+        <img src="terminal/public/payai.jpg" alt="PayAI" width="80" height="80" />
       </a>
     </td>
     <td>
@@ -461,7 +461,15 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 ---
 
-## Star History [![Star History Chart](https://api.star-history.com/svg?repos=PredictionXBT/PredictOS&type=Date&theme=dark&v=1)](https://star-history.com/#PredictionXBT/PredictOS&Date)
+## Star History
+
+<a href="https://star-history.com/#PredictionXBT/PredictOS&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=PredictionXBT/PredictOS&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=PredictionXBT/PredictOS&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=PredictionXBT/PredictOS&type=Date" />
+  </picture>
+</a>
 
 ---
 
