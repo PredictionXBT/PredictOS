@@ -16,12 +16,17 @@ export interface GetEventsRequest {
   dataProvider?: DataProvider;
 }
 
+/** URL source type (tracks if URL came from a wrapper like Jupiter) */
+export type UrlSource = 'kalshi' | 'polymarket' | 'jupiter';
+
 export interface GetEventsResponse {
   success: boolean;
   eventIdentifier?: string;
   /** Event ID (for Polymarket - used for OkBet links) */
   eventId?: string;
   pmType?: PmType;
+  /** Original URL source (e.g., 'jupiter' for Jupiter prediction market links) */
+  urlSource?: UrlSource;
   markets?: unknown[];
   marketsCount?: number;
   dataProvider?: DataProvider;

@@ -31,9 +31,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine data provider based on URL: Kalshi → dflow, Polymarket → dome
-    const isKalshi = body.url.toLowerCase().includes("kalshi");
-    const dataProvider = isKalshi ? "dflow" : "dome";
+    // Determine data provider based on URL: Kalshi/Jupiter → dflow, Polymarket → dome
+    // Jupiter prediction markets are based on Kalshi events
+    const lowerUrl = body.url.toLowerCase();
+    const isKalshiBased = lowerUrl.includes("kalshi") || lowerUrl.includes("jup.ag/prediction");
+    const dataProvider = isKalshiBased ? "dflow" : "dome";
 
     const edgeFunctionUrl = process.env.SUPABASE_EDGE_FUNCTION_GET_EVENTS 
       || `${supabaseUrl}/functions/v1/get-events`;

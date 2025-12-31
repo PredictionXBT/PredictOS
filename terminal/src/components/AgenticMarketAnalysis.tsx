@@ -35,6 +35,7 @@ import type {
   EventAnalysisAgentResponse,
   AnalysisAggregatorResponse,
   PmType,
+  UrlSource,
   MarketAnalysis,
   GrokTool,
   AgentTool,
@@ -99,13 +100,22 @@ function isOpenAIModel(model: string): boolean {
 }
 
 // URL type detection
-type UrlType = 'kalshi' | 'polymarket' | 'none';
+type UrlType = 'kalshi' | 'polymarket' | 'jupiter' | 'none';
 
 function detectUrlType(url: string): UrlType {
   const lowerUrl = url.toLowerCase();
+  // Jupiter prediction markets (based on Kalshi) - detect before generic kalshi check
+  if (lowerUrl.includes('jup.ag/prediction')) return 'jupiter';
   if (lowerUrl.includes('kalshi')) return 'kalshi';
   if (lowerUrl.includes('polymarket')) return 'polymarket';
   return 'none';
+}
+
+/**
+ * Build Jupiter prediction market URL from event ticker
+ */
+function buildJupiterUrl(eventTicker: string): string {
+  return `https://jup.ag/prediction/${eventTicker}`;
 }
 
 function generateAgentId(): string {
@@ -130,6 +140,7 @@ const AgenticMarketAnalysis = () => {
     eventIdentifier: string;
     eventId?: string;
     pmType: PmType;
+    urlSource?: UrlSource;
     markets: unknown[];
   } | null>(null);
   
@@ -178,7 +189,7 @@ const AgenticMarketAnalysis = () => {
   // Derived state
   const detectedUrlType = useMemo(() => detectUrlType(url), [url]);
   const showAggregator = agents.length > 1;
-  const isAutonomousAvailable = detectedUrlType === 'polymarket'; // Only Polymarket supports autonomous mode
+  const isAutonomousAvailable = detectedUrlType === 'polymarket'; // Only Polymarket supports autonomous mode (Kalshi and Jupiter do not)
   
   // Check if analysis is complete (at least one agent completed, or aggregator completed if multiple agents)
   const isAnalysisComplete = useMemo(() => {
@@ -200,6 +211,24 @@ const AgenticMarketAnalysis = () => {
     } else if (eventData.pmType === 'Kalshi') {
       // For Kalshi: https://t.me/okdotbet_bot?start=kalshi_{event_ticker}
       return `https://t.me/okdotbet_bot?start=kalshi_${eventData.eventIdentifier}`;
+    }
+    return null;
+  }, [eventData]);
+  
+  // Generate market URL for display in analysis output
+  // For Jupiter source, we rebuild the Jupiter URL; otherwise show the original market URL
+  const getMarketUrl = useMemo(() => {
+    if (!eventData) return null;
+    
+    if (eventData.urlSource === 'jupiter') {
+      // Rebuild Jupiter URL from event ticker
+      return buildJupiterUrl(eventData.eventIdentifier);
+    } else if (eventData.pmType === 'Kalshi') {
+      // Standard Kalshi URL
+      return `https://kalshi.com/markets/${eventData.eventIdentifier.toLowerCase()}`;
+    } else if (eventData.pmType === 'Polymarket') {
+      // Standard Polymarket URL
+      return `https://polymarket.com/event/${eventData.eventIdentifier}`;
     }
     return null;
   }, [eventData]);
@@ -528,6 +557,7 @@ const AgenticMarketAnalysis = () => {
         eventIdentifier: eventsData.eventIdentifier,
         eventId: eventsData.eventId,
         pmType: eventsData.pmType,
+        urlSource: eventsData.urlSource,
         markets: eventsData.markets,
       });
 
@@ -1564,7 +1594,7 @@ const AgenticMarketAnalysis = () => {
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="Paste Kalshi or Polymarket URL ..."
+                placeholder="Paste Kalshi, Polymarket, or Jupiter URL ..."
                 disabled={isRunning}
                 className="flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/50 font-mono"
               />
@@ -1576,7 +1606,16 @@ const AgenticMarketAnalysis = () => {
                 <span className="text-[9px] font-mono text-muted-foreground/50 uppercase">
                   via
                 </span>
-                {detectedUrlType === 'kalshi' ? (
+                {/* Jupiter badge for Jupiter prediction markets */}
+                {detectedUrlType === 'jupiter' && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-gradient-to-r from-[#00D18C]/20 to-[#C7F284]/20 border border-[#00D18C]/30">
+                    <span className="text-[10px] font-semibold bg-gradient-to-r from-[#00D18C] to-[#C7F284] bg-clip-text text-transparent">
+                      Jupiter
+                    </span>
+                  </span>
+                )}
+                {/* DFlow for Kalshi and Jupiter (since Jupiter uses Kalshi data) */}
+                {(detectedUrlType === 'kalshi' || detectedUrlType === 'jupiter') && (
                   <a
                     href="https://pond.dflow.net/introduction"
                     target="_blank"
@@ -1594,7 +1633,9 @@ const AgenticMarketAnalysis = () => {
                       DFlow
                     </span>
                   </a>
-                ) : (
+                )}
+                {/* Dome for Polymarket */}
+                {detectedUrlType === 'polymarket' && (
                   <a
                     href="https://domeapi.io/"
                     target="_blank"
@@ -1745,6 +1786,8 @@ const AgenticMarketAnalysis = () => {
                       <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono">Polymarket</span>
                     ) : detectedUrlType === 'kalshi' ? (
                       <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono">Kalshi - Soon</span>
+                    ) : detectedUrlType === 'jupiter' ? (
+                      <span className="px-1.5 py-0.5 rounded bg-gradient-to-r from-[#00D18C]/20 to-[#C7F284]/20 text-[#00D18C] font-mono">Jupiter - Soon</span>
                     ) : (
                       <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono">Polymarket Only (Kalshi Soon)</span>
                     )}
@@ -2036,6 +2079,7 @@ const AgenticMarketAnalysis = () => {
                           <AnalysisOutput
                             analysis={agent.result!}
                             timestamp={new Date()}
+                            marketUrl={getMarketUrl || undefined}
                             polyfactualResearch={agent.polyfactualResearch}
                           />
                         </div>
@@ -2216,6 +2260,7 @@ const AgenticMarketAnalysis = () => {
                           analysis={aggregator.result}
                           timestamp={new Date()}
                           agentsCount={agents.filter(a => a.status === 'completed').length}
+                          marketUrl={getMarketUrl || undefined}
                         />
                       </div>
                     )}

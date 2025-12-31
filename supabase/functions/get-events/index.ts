@@ -15,6 +15,7 @@ import type {
   GetEventsRequest,
   GetEventsResponse,
   PmType,
+  UrlSource,
 } from "./types.ts";
 
 /**
@@ -101,13 +102,37 @@ async function getPolymarketEventAndMarkets(slug: string): Promise<{
 }
 
 /**
- * Detect prediction market type from URL
+ * Detect prediction market type and URL source from URL
+ * Jupiter URLs (jup.ag/prediction/*) are treated as Kalshi since they use Kalshi event tickers
  */
-function detectPmType(url: string): PmType | null {
+function detectPmTypeAndSource(url: string): { pmType: PmType | null; urlSource: UrlSource | null } {
   const lowerUrl = url.toLowerCase();
-  if (lowerUrl.includes('kalshi')) return 'Kalshi';
-  if (lowerUrl.includes('polymarket')) return 'Polymarket';
-  return null;
+  
+  // Jupiter prediction markets are based on Kalshi events
+  if (lowerUrl.includes('jup.ag/prediction')) {
+    return { pmType: 'Kalshi', urlSource: 'jupiter' };
+  }
+  
+  if (lowerUrl.includes('kalshi')) {
+    return { pmType: 'Kalshi', urlSource: 'kalshi' };
+  }
+  
+  if (lowerUrl.includes('polymarket')) {
+    return { pmType: 'Polymarket', urlSource: 'polymarket' };
+  }
+  
+  return { pmType: null, urlSource: null };
+}
+
+/**
+ * Extract Kalshi event ticker from Jupiter URL
+ * Jupiter URL format: https://jup.ag/prediction/TICKER (e.g., https://jup.ag/prediction/KXPRESNOMD-28)
+ */
+function extractJupiterEventTicker(url: string): string | null {
+  const urlWithoutParams = url.split('?')[0];
+  const parts = urlWithoutParams.split('/');
+  const ticker = parts[parts.length - 1];
+  return ticker && ticker.length > 0 ? ticker.toUpperCase() : null;
 }
 
 const corsHeaders = {
@@ -159,14 +184,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Detect market type
-    const pmType = detectPmType(url);
+    // Detect market type and URL source
+    const { pmType, urlSource } = detectPmTypeAndSource(url);
     
     // Enforce data provider based on market type: Kalshi → dflow, Polymarket → dome
     const dataProvider = pmType === 'Kalshi' ? 'dflow' : 'dome';
-    if (!pmType) {
+    if (!pmType || !urlSource) {
       return new Response(
-        JSON.stringify({ success: false, error: "Could not detect prediction market type from URL. Use Kalshi or Polymarket URLs." }),
+        JSON.stringify({ success: false, error: "Could not detect prediction market type from URL. Use Kalshi, Polymarket, or Jupiter prediction market URLs." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -176,9 +201,18 @@ Deno.serve(async (req: Request) => {
     let markets: unknown[];
 
     if (pmType === "Kalshi") {
-      // Extract event ticker from Kalshi URL
-      const urlParts = url.split('/');
-      const eventTicker = urlParts[urlParts.length - 1]?.toUpperCase();
+      // Extract event ticker - handle both Kalshi URLs and Jupiter URLs
+      let eventTicker: string | null;
+      
+      if (urlSource === 'jupiter') {
+        // Jupiter URL format: https://jup.ag/prediction/TICKER
+        eventTicker = extractJupiterEventTicker(url);
+        console.log(`Detected Jupiter prediction market URL, extracted ticker: ${eventTicker}`);
+      } else {
+        // Kalshi URL format: https://kalshi.com/markets/.../EVENT_TICKER
+        const urlParts = url.split('/');
+        eventTicker = urlParts[urlParts.length - 1]?.toUpperCase() || null;
+      }
 
       if (!eventTicker) {
         return new Response(
@@ -189,7 +223,8 @@ Deno.serve(async (req: Request) => {
 
       eventIdentifier = eventTicker;
       const providerName = dataProvider === 'dflow' ? 'DFlow' : 'Dome';
-      console.log(`Fetching Kalshi markets via ${providerName}:`, { eventTicker, dataProvider });
+      const sourceInfo = urlSource === 'jupiter' ? ' (via Jupiter)' : '';
+      console.log(`Fetching Kalshi markets via ${providerName}${sourceInfo}:`, { eventTicker, dataProvider, urlSource });
 
       try {
         if (dataProvider === 'dflow') {
@@ -285,6 +320,7 @@ Deno.serve(async (req: Request) => {
       eventIdentifier,
       eventId,
       pmType,
+      urlSource,
       markets,
       marketsCount: markets.length,
       dataProvider: effectiveDataProvider,

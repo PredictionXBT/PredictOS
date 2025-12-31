@@ -8,9 +8,10 @@ interface AggregatedAnalysisOutputProps {
   analysis: AggregatedAnalysis;
   timestamp: Date;
   agentsCount: number;
+  marketUrl?: string;
 }
 
-const AggregatedAnalysisOutput = ({ analysis, timestamp, agentsCount }: AggregatedAnalysisOutputProps) => {
+const AggregatedAnalysisOutput = ({ analysis, timestamp, agentsCount, marketUrl }: AggregatedAnalysisOutputProps) => {
   const [displayedLines, setDisplayedLines] = useState<number>(0);
   
   const getVerdict = (): "bullish" | "bearish" | "neutral" => {
@@ -51,6 +52,7 @@ const AggregatedAnalysisOutput = ({ analysis, timestamp, agentsCount }: Aggregat
     { type: "header", content: `AGGREGATED ANALYSIS: ${analysis.title}` },
     { type: "info", content: `EVENT: ${analysis.event_ticker}` },
     { type: "info", content: `TICKER: ${analysis.ticker}` },
+    ...(marketUrl ? [{ type: "info", content: `URL: ${marketUrl}` }] : []),
     { type: "divider", content: "─".repeat(50) },
     { type: "consensus-header", content: "AGENT CONSENSUS:" },
     { type: "consensus", content: `Agreement Level: ${analysis.agentConsensus?.agreementLevel?.toUpperCase() || 'N/A'}` },

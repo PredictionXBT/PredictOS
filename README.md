@@ -23,6 +23,8 @@
 
 Prediction markets are having their moment. With platforms like **Kalshi** and **Polymarket** opening up their APIs to the public, there's now unprecedented access to real-time market data, order books, and trading capabilities. But raw API access is just the beginning — what's been missing is a unified framework that lets anyone tap into this new financial primitive.
 
+> 💡 **Jupiter Support:** We also support [Jupiter prediction markets](https://jup.ag/prediction) since they're built on Kalshi events — just paste a Jupiter URL and PredictOS will analyze the underlying Kalshi market.
+
 **PredictOS is that framework.**
 
 ### 🔓 Why Open Source?
@@ -107,10 +109,11 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 
 > 📖 **[Full Setup Guide →](docs/features/super-intelligence.md)**
 
-## 🎯 Current Features (v2.2.0)
+## 🎯 Current Features (v2.3.0)
 
 | Feature | Status | Description | Setup Guide |
 |---------|--------|-------------|-------------|
+| **🌐 Supported Markets** | ✅ Released | **Kalshi**, **Polymarket**, and **Jupiter** (Kalshi-based). Data powered by [DFlow](https://pond.dflow.net/introduction) (Kalshi/Jupiter) and [Dome](https://domeapi.io/) (Polymarket). | — |
 | **🧠 Super Intelligence** | ✅ Released | Multi-agent AI system with Supervised and Autonomous modes. Deploy multiple AI agents with different models and tools, aggregate insights via Bookmaker Agent, and execute trades automatically or via OkBet. Includes AI-powered market analysis and Polyfactual Deep Research. | [📖 Setup Guide](docs/features/super-intelligence.md) |
 | **🛡️ Verifiable Agents** | ✅ Released | Permanently store agent analysis on [Irys](https://irys.xyz/) blockchain for transparent, verifiable AI predictions. Supports both devnet (free, temporary) and mainnet (permanent). | [📖 Setup Guide](docs/features/verifiable-agents.md) |
 | **💸 x402 / PayAI Integration** | ✅ Released | Access paid AI services and data providers through the x402 protocol. Browse the PayAI bazaar, select sellers, and pay with USDC on Solana or Base. Use as a tool in your Predict Agents. | [📖 Setup Guide](docs/features/x402-integration.md) |
