@@ -347,6 +347,19 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
 <table>
 <tr>
     <td width="120" align="center">
+      <a href="https://www.privy.io/">
+        <img src="terminal/public/Privy_logo.png" alt="Privy" width="80" height="80" />
+      </a>
+    </td>
+    <td>
+      <h3><a href="https://www.privy.io/">Privy</a></h3>
+      <p><strong>Wallet infrastructure for winning teams.</strong> Recently acquired by Stripe, Privy powers 100M+ accounts and processes billions in volume every year with low-level APIs for onchain payments and asset management.</p>
+      <p>🔗 PredictOS partners with Privy to supercharge wallet infrastructure across the Predict ecosystem — delivering more secure, seamless, and unified wallet integrations to make it easier than ever to onboard users with any wallet.</p>
+      <p><a href="https://www.privy.io/">🌐 Website</a> · <a href="https://x.com/privy_io">𝕏 Twitter</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="120" align="center">
       <a href="https://pond.dflow.net/introduction">
         <img src="terminal/public/Dflow_logo.png" alt="DFlow" width="80" height="80" style="border-radius: 12px; background: #1e1b4b; padding: 8px;" />
       </a>
