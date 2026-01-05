@@ -141,10 +141,10 @@ PredictOS uses specialized data providers for each prediction market platform:
 
 | Platform | Data Provider | API Endpoint | Features |
 |----------|---------------|--------------|----------|
-| **Kalshi** | 🔷 DFlow | `dev-prediction-markets-api.dflow.net` | Event data, market prices, volume, liquidity, open interest |
+| **Kalshi** | 🔷 DFlow | `a.prediction-markets-api.dflow.net` | Event data, market prices, volume, liquidity, open interest |
 | **Polymarket** | 🌐 Dome | `api.domeapi.io` | Market data, CLOB tokens, WebSocket feeds, order execution |
 
-> ⚠️ **Note:** The DFlow endpoint above (`dev-prediction-markets-api.dflow.net`) is their **development environment**. For production endpoints and API keys, please [contact DFlow](https://x.com/dflow) directly.
+> 💡 **Note:** DFlow API requires an API key. Contact [DFlow](https://x.com/dflow) to obtain your `DFLOW_API_KEY`.
 
 ### Project Structure
 
@@ -236,7 +236,7 @@ cp .env.example .env.local
 Edit `.env.local` with the credentials required for the features you want to use:
 
 > 📖 **Feature-specific setup guides:**
-> - **Super Intelligence:** [docs/features/super-intelligence.md](docs/features/super-intelligence.md) — requires `DOME_API_KEY` (Polymarket) + AI provider keys (`XAI_API_KEY` and/or `OPENAI_API_KEY`). DFlow API is used automatically for Kalshi (no key required). Optional: `POLYFACTUAL_API_KEY` for Polyfactual tool. For Autonomous mode: `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`.
+> - **Super Intelligence:** [docs/features/super-intelligence.md](docs/features/super-intelligence.md) — requires `DOME_API_KEY` (Polymarket) + `DFLOW_API_KEY` (Kalshi) + AI provider keys (`XAI_API_KEY` and/or `OPENAI_API_KEY`). Optional: `POLYFACTUAL_API_KEY` for Polyfactual tool. For Autonomous mode: `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`.
 > - **Betting Bots:** [docs/features/betting-bots.md](docs/features/betting-bots.md) — requires `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`
 > - **Wallet Tracking:** [docs/features/wallet-tracking.md](docs/features/wallet-tracking.md) — requires `DOME_API_KEY` (frontend only, no Supabase needed)
 
@@ -245,7 +245,7 @@ Example for Super Intelligence (full setup):
 ```env
 # Market Data Providers
 DOME_API_KEY=your_dome_api_key              # Get from https://dashboard.domeapi.io (for Polymarket)
-# Note: DFlow API is used automatically for Kalshi markets (no API key required)
+DFLOW_API_KEY=your_dflow_api_key            # Contact DFlow: https://x.com/dflow (for Kalshi)
 
 # AI Providers (configure one or both)
 XAI_API_KEY=your_xai_api_key                # Get from https://x.ai

@@ -31,7 +31,7 @@ flowchart TB
     DETECT -->|"polymarket.com/*"| DOME
     
     subgraph KALSHI["🏛️ KALSHI MARKETS"]
-        DFLOW["🔷 DFlow API<br/><small>dev-prediction-markets-api.dflow.net</small>"]
+        DFLOW["🔷 DFlow API<br/><small>a.prediction-markets-api.dflow.net</small>"]
         K_FEATURES["<strong>Features:</strong><br/>• Event ticker resolution<br/>• Yes/No bid & ask prices<br/>• Volume & 24h volume<br/>• Liquidity metrics<br/>• Open interest<br/>• Market status"]
         DFLOW --> K_FEATURES
     end
@@ -58,10 +58,10 @@ flowchart TB
 
 | Platform | Data Provider | API Endpoint | API Key Required |
 |----------|---------------|--------------|------------------|
-| **Kalshi** | 🔷 **DFlow** | `dev-prediction-markets-api.dflow.net/api/v1` | ❌ No (dev) |
+| **Kalshi** | 🔷 **DFlow** | `a.prediction-markets-api.dflow.net/api/v1` | ✅ Yes |
 | **Polymarket** | 🌐 **Dome** | `api.domeapi.io` | ✅ Yes |
 
-> ⚠️ **Note:** The DFlow endpoint above is their **development environment**. For production endpoints and API keys, please [contact DFlow](https://x.com/dflow) directly.
+> 💡 **Note:** Both DFlow and Dome APIs require API keys. Contact [DFlow](https://x.com/dflow) to obtain your `DFLOW_API_KEY`.
 
 ### Full System Architecture
 
@@ -202,11 +202,19 @@ DOME_API_KEY=your_dome_api_key
 3. Navigate to API Keys section
 4. Generate a new API key
 
-##### DFlow API (No Key Required for Kalshi Dev Environment)
+##### DFlow API Key (Required for Kalshi)
 
-DFlow API is used automatically for Kalshi markets. The **development environment** requires no API key.
+```env
+DFLOW_API_KEY=your_dflow_api_key
+```
 
-**Dev API Endpoint:** `https://dev-prediction-markets-api.dflow.net/api/v1`
+**What it's for:** DFlow API provides access to Kalshi market data including event prices, volume, liquidity, and open interest.
+
+**API Endpoint:** `https://a.prediction-markets-api.dflow.net/api/v1`
+
+**How to get it:**
+1. Contact [DFlow](https://x.com/dflow) to request API access
+2. They will provide you with an API key
 
 **Data provided:**
 - Event ticker and nested markets
@@ -214,8 +222,6 @@ DFlow API is used automatically for Kalshi markets. The **development environmen
 - Last price, volume, 24h volume
 - Liquidity and open interest
 - Market status and close time
-
-> ⚠️ **Production Access:** The endpoint above is DFlow's dev environment. For production endpoints and API keys, please [contact DFlow](https://x.com/dflow) directly.
 
 #### 2. AI Provider API Keys (At least one required)
 
@@ -316,9 +322,9 @@ SUPABASE_EDGE_FUNCTION_POLYFACTUAL_RESEARCH=http://127.0.0.1:54321/functions/v1/
 # Dome API - Required for Polymarket markets
 DOME_API_KEY=your_dome_api_key
 
-# DFlow API - Used automatically for Kalshi (no key required for dev environment)
-# Dev Endpoint: https://dev-prediction-markets-api.dflow.net/api/v1
-# For production endpoints and keys, contact DFlow: https://x.com/dflow
+# DFlow API - Required for Kalshi markets
+# Contact DFlow to obtain: https://x.com/dflow
+DFLOW_API_KEY=your_dflow_api_key
 
 # =============================================================================
 # AI PROVIDERS (At least one required)
@@ -547,13 +553,14 @@ In Autonomous mode, the Mapper Agent:
 
 DFlow provides comprehensive Kalshi market data through a REST API.
 
-**Dev Endpoint:** `https://dev-prediction-markets-api.dflow.net/api/v1`
+**Endpoint:** `https://a.prediction-markets-api.dflow.net/api/v1`
 
-> ⚠️ **Note:** This is DFlow's development environment. For production access with higher rate limits and enterprise features, [contact DFlow](https://x.com/dflow).
+**API Key:** Required (contact [DFlow](https://x.com/dflow) to obtain)
 
 **Example Request:**
 ```
 GET /event/{event_ticker}?withNestedMarkets=true
+Headers: x-api-key: your_dflow_api_key
 ```
 
 **Response Data:**
@@ -596,6 +603,7 @@ Dome provides Polymarket market data and trading capabilities.
 | Error | Solution |
 |-------|----------|
 | "DOME_API_KEY is not configured" | Add your Dome API key to `.env.local` (required for Polymarket) |
+| "DFLOW_API_KEY is not configured" | Add your DFlow API key to `.env.local` (required for Kalshi) |
 | "No AI provider configured" | Add either XAI_API_KEY or OPENAI_API_KEY |
 | "Please select a model for all agents" | Choose a model from the dropdown for each agent |
 | "Please select a model for the aggregator" | Choose a model for the Bookmaker Agent |
