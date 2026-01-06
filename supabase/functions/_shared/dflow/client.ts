@@ -3,12 +3,24 @@
  * DFlow provides Kalshi market data as an alternative to Dome
  */
 
-const DFLOW_API_BASE_URL = 'https://dev-prediction-markets-api.dflow.net/api/v1';
+const DFLOW_API_BASE_URL = 'https://a.prediction-markets-api.dflow.net/api/v1';
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   headers?: Record<string, string>;
   params?: Record<string, string | number | boolean | undefined>;
+}
+
+/**
+ * Gets the DFlow API key from environment variables
+ * @returns The API key or throws an error if not configured
+ */
+function getDFlowApiKey(): string {
+  const apiKey = Deno.env.get('DFLOW_API_KEY');
+  if (!apiKey) {
+    throw new Error('DFLOW_API_KEY is not configured. Get your API key from DFlow: https://x.com/dflow');
+  }
+  return apiKey;
 }
 
 /**
@@ -22,6 +34,7 @@ export async function request<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const { method = 'GET', headers = {}, params = {} } = options;
+  const apiKey = getDFlowApiKey();
 
   // Build query string from params
   const queryParams = new URLSearchParams();
@@ -38,6 +51,7 @@ export async function request<T>(
     method,
     headers: {
       'Content-Type': 'application/json',
+      'x-api-key': apiKey,
       ...headers,
     },
   });

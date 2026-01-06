@@ -13,7 +13,7 @@
   <p><a href="https://predictionxbt.fun">🌐 Social Prediction Markets</a> · <a href="https://x.com/prediction_xbt">𝕏 PredictionXBT</a> · <a href="https://predictionxbt.fun/terminal">🖥️ Alpha/Arb Terminal</a> · <a href="https://x.com/predict_agent">🤖 Predict Agent</a></p>
 
   <a href="https://github.com/PredictionXBT/PredictOS/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"></a>
-  <a href="https://github.com/PredictionXBT/PredictOS"><img src="https://img.shields.io/badge/version-2.0.0-blue?style=for-the-badge" alt="Version"></a>
+  <a href="https://github.com/PredictionXBT/PredictOS"><img src="https://img.shields.io/badge/version-2.4.0-blue?style=for-the-badge" alt="Version"></a>
 
 </div>
 
@@ -109,12 +109,13 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 
 > 📖 **[Full Setup Guide →](docs/features/super-intelligence.md)**
 
-## 🎯 Current Features (v2.3.0)
+## 🎯 Current Features (v2.4.0)
 
 | Feature | Status | Description | Setup Guide |
 |---------|--------|-------------|-------------|
 | **🌐 Supported Markets** | ✅ Released | **Kalshi**, **Polymarket**, and **Jupiter** (Kalshi-based). Data powered by [DFlow](https://pond.dflow.net/introduction) (Kalshi/Jupiter) and [Dome](https://domeapi.io/) (Polymarket). | — |
 | **🧠 Super Intelligence** | ✅ Released | Multi-agent AI system with Supervised and Autonomous modes. Deploy multiple AI agents with different models and tools, aggregate insights via Bookmaker Agent, and execute trades automatically or via OkBet. Includes AI-powered market analysis and Polyfactual Deep Research. | [📖 Setup Guide](docs/features/super-intelligence.md) |
+| **⚖️ Arbitrage Intelligence** | ✅ Released | AI-powered cross-platform arbitrage detection between Polymarket and Kalshi. Paste any market URL, and the system automatically searches for the same market on the other platform, compares prices, and provides actionable arbitrage strategies with profit calculations. | [📖 Setup Guide](docs/features/arbitrage-intelligence.md) |
 | **🛡️ Verifiable Agents** | ✅ Released | Permanently store agent analysis on [Irys](https://irys.xyz/) blockchain for transparent, verifiable AI predictions. Supports both devnet (free, temporary) and mainnet (permanent). | [📖 Setup Guide](docs/features/verifiable-agents.md) |
 | **💸 x402 / PayAI Integration** | ✅ Released | Access paid AI services and data providers through the x402 protocol. Browse the PayAI bazaar, select sellers, and pay with USDC on Solana or Base. Use as a tool in your Predict Agents. | [📖 Setup Guide](docs/features/x402-integration.md) |
 | **Betting Bots** | ✅ Released | Polymarket 15 Minute Up/Down Arbitrage Bot — **Vanilla Mode** (single price straddle) and **Ladder Mode** (multi-level tapered allocation for maximized fill rates) | [📖 Setup Guide](docs/features/betting-bots.md) |
@@ -128,7 +129,6 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 | **No Code Builder** | Build trading strategies without writing code |
 | **Whale Tracking** | Automated alerts and analysis for large traders across markets |
 | **Copytrading** | Automatically copy top-performing traders |
-| **Arbitrage Opportunity** | Detect and exploit cross-platform price differences |
 | **Perps Trading / Leverage** | Leveraged prediction market positions |
 | **$Predict Staking** | Stake for APY rewards, unlock enhanced trading abilities, and get boosted access to prediction markets |
 | **Predict Protocol SDK** | For trading Social markets built on Predict (currently Testnet on [predictionxbt.fun](https://predictionxbt.fun)) |
@@ -141,10 +141,10 @@ PredictOS uses specialized data providers for each prediction market platform:
 
 | Platform | Data Provider | API Endpoint | Features |
 |----------|---------------|--------------|----------|
-| **Kalshi** | 🔷 DFlow | `dev-prediction-markets-api.dflow.net` | Event data, market prices, volume, liquidity, open interest |
+| **Kalshi** | 🔷 DFlow | `a.prediction-markets-api.dflow.net` | Event data, market prices, volume, liquidity, open interest |
 | **Polymarket** | 🌐 Dome | `api.domeapi.io` | Market data, CLOB tokens, WebSocket feeds, order execution |
 
-> ⚠️ **Note:** The DFlow endpoint above (`dev-prediction-markets-api.dflow.net`) is their **development environment**. For production endpoints and API keys, please [contact DFlow](https://x.com/dflow) directly.
+> 💡 **Note:** DFlow API requires an API key. Contact [DFlow](https://x.com/dflow) to obtain your `DFLOW_API_KEY`.
 
 ### Project Structure
 
@@ -154,20 +154,23 @@ PredictOS/
 │   ├── src/
 │   │   ├── app/                     # Next.js App Router
 │   │   │   ├── api/                 # API routes (proxy to Edge Functions)
+│   │   │   │   ├── arbitrage-finder/   # Arbitrage Intelligence proxy
 │   │   │   │   ├── bookmaker-agent/
 │   │   │   │   ├── event-analysis-agent/
 │   │   │   │   ├── get-events/
 │   │   │   │   ├── irys-upload/        # Verifiable Agents - Irys blockchain upload
 │   │   │   │   ├── mapper-agent/
 │   │   │   │   ├── polyfactual-research/
-        │   │   │   │   ├── polymarket-put-order/
-        │   │   │   │   ├── wallet-tracking/
-        │   │   │   │   └── x402-seller/         # x402/PayAI integration
+│   │   │   │   ├── polymarket-put-order/
+│   │   │   │   ├── wallet-tracking/
+│   │   │   │   └── x402-seller/         # x402/PayAI integration
+│   │   │   ├── arbitrage/           # Arbitrage Intelligence UI
 │   │   │   ├── market-analysis/     # Super Intelligence UI
 │   │   │   ├── betting-bots/        # Betting Bots UI
 │   │   │   └── wallet-tracking/     # Wallet Tracking UI
 │   │   ├── components/              # React components
 │   │   │   ├── AgenticMarketAnalysis.tsx   # Super Intelligence component
+│   │   │   ├── ArbitrageTerminal.tsx       # Arbitrage Intelligence component
 │   │   │   ├── BettingBotTerminal.tsx
 │   │   │   └── WalletTrackingTerminal.tsx
 │   │   ├── lib/                     # Utility libraries
@@ -183,6 +186,8 @@ PredictOS/
         │   │   ├── callGrok.ts
         │   │   ├── callOpenAI.ts
         │   │   └── prompts/         # Agent prompts
+        │   │       ├── arbitrageAnalysis.ts      # Arbitrage comparison prompt
+        │   │       └── searchQueryGenerator.ts   # Cross-platform search prompt
         │   ├── dflow/               # DFlow API client (Kalshi data)
         │   │   ├── client.ts
         │   │   ├── endpoints.ts
@@ -196,6 +201,7 @@ PredictOS/
         │   └── x402/                # x402/PayAI protocol client
         │       ├── client.ts        # Bazaar discovery & payment handling
         │       └── types.ts
+        ├── arbitrage-finder/        # Arbitrage Intelligence endpoint
         ├── get-events/              # Fetch market data from URL
         ├── event-analysis-agent/    # Individual agent analysis
         ├── bookmaker-agent/         # Multi-agent aggregator
@@ -236,7 +242,7 @@ cp .env.example .env.local
 Edit `.env.local` with the credentials required for the features you want to use:
 
 > 📖 **Feature-specific setup guides:**
-> - **Super Intelligence:** [docs/features/super-intelligence.md](docs/features/super-intelligence.md) — requires `DOME_API_KEY` (Polymarket) + AI provider keys (`XAI_API_KEY` and/or `OPENAI_API_KEY`). DFlow API is used automatically for Kalshi (no key required). Optional: `POLYFACTUAL_API_KEY` for Polyfactual tool. For Autonomous mode: `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`.
+> - **Super Intelligence:** [docs/features/super-intelligence.md](docs/features/super-intelligence.md) — requires `DOME_API_KEY` (Polymarket) + `DFLOW_API_KEY` (Kalshi) + AI provider keys (`XAI_API_KEY` and/or `OPENAI_API_KEY`). Optional: `POLYFACTUAL_API_KEY` for Polyfactual tool. For Autonomous mode: `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`.
 > - **Betting Bots:** [docs/features/betting-bots.md](docs/features/betting-bots.md) — requires `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`
 > - **Wallet Tracking:** [docs/features/wallet-tracking.md](docs/features/wallet-tracking.md) — requires `DOME_API_KEY` (frontend only, no Supabase needed)
 
@@ -245,7 +251,7 @@ Example for Super Intelligence (full setup):
 ```env
 # Market Data Providers
 DOME_API_KEY=your_dome_api_key              # Get from https://dashboard.domeapi.io (for Polymarket)
-# Note: DFlow API is used automatically for Kalshi markets (no API key required)
+DFLOW_API_KEY=your_dflow_api_key            # Contact DFlow: https://x.com/dflow (for Kalshi)
 
 # AI Providers (configure one or both)
 XAI_API_KEY=your_xai_api_key                # Get from https://x.ai

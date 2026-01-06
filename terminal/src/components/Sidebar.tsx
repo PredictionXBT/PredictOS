@@ -26,12 +26,12 @@ interface SidebarProps {
 
 const navItems = [
   { id: "analysis", label: "Predict Super Intelligence", icon: BarChart3, available: true, href: "/market-analysis" },
+  { id: "arbitrage", label: "Arbitrage Intelligence", icon: ArrowLeftRight, available: true, href: "/arbitrage" },
   { id: "betting-bots", label: "Betting Bots", icon: Bot, available: true, href: "/betting-bots" },
   { id: "wallet-tracking", label: "Wallet Tracking", icon: Eye, available: true, href: "/wallet-tracking" },
   { id: "no-code-builder", label: "No Code Builder", icon: Wand2, available: false },
   { id: "whale-tracking", label: "Whale Tracking", icon: Fish, available: false },
   { id: "copytrading", label: "Copytrading", icon: Copy, available: false },
-  { id: "arbitrage", label: "Arbitrage Opportunity", icon: ArrowLeftRight, available: false },
   { id: "perps", label: "Perps Trading / Leverage", icon: TrendingUp, available: false },
   { id: "staking", label: "$Predict Staking", icon: Coins, available: false },
   { id: "sdk", label: "Predict Protocol SDK", icon: Blocks, available: false },
@@ -254,7 +254,7 @@ export function Sidebar({ activeTab }: SidebarProps) {
           
           {/* Version Tag */}
           <span className="text-[10px] px-2 py-0.5 rounded bg-success/20 text-success border border-success font-mono font-bold">
-            v2.3.0
+            v2.4.0
           </span>
         </div>
       </div>
