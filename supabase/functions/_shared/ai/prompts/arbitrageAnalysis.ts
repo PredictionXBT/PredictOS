@@ -92,13 +92,12 @@ Return a JSON object with this exact structure:
   "matchedMarket": {
     "source": "${searchPlatform}",
     "name": "string - market title/name",
-    "identifier": "string - slug or ticker",
+    "identifier": "string - the identifier field from the matched search result",
     "yesPrice": number (0-100),
     "noPrice": number (0-100),
     "volume": number or null,
     "liquidity": number or null,
-    "url": "string - market URL",
-    "okbetUrl": "string - OkBet URL for this market"
+    "url": "string - market URL (see URL format below)"
   } or null if no match found,
   "arbitrage": {
     "hasArbitrage": boolean,
@@ -120,8 +119,9 @@ Return a JSON object with this exact structure:
 
 ## Important Notes
 
-- For Polymarket markets, the OkBet URL format is: https://okbet.xyz/polymarket/[slug]
-- For Kalshi markets, the OkBet URL format is: https://okbet.xyz/kalshi/[ticker]
+- For Polymarket markets, the URL format is: https://polymarket.com/event/[identifier]
+- For Kalshi markets, the URL format is: https://kalshi.com/events/[identifier]
+- Each search result has an "identifier" field - use it to build the URL
 - ${searchPlatform === 'polymarket' ? 'Polymarket prices in outcomePrices are decimals (0.45 = 45%)' : 'Kalshi prices are already in percentage (45 = 45%)'}
 - Only report arbitrage if you're at least 80% confident the markets are the same
 - If no matching market is found, set isSameMarket to false and explain why

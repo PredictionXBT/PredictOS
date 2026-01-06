@@ -48,6 +48,8 @@ const corsHeaders = {
 interface SimplifiedMarket {
   title: string;
   yesPrice: number;
+  /** Event identifier for URL building (slug for polymarket, event ticker for kalshi) */
+  identifier?: string;
 }
 
 /** Source event data */
@@ -55,6 +57,25 @@ interface SourceEventData {
   eventTitle: string;
   markets: SimplifiedMarket[];
   source: ArbitrageMarketSource;
+  /** Slug (polymarket) or ticker (kalshi) for building URLs */
+  identifier: string;
+}
+
+// =============================================================================
+// URL Building
+// =============================================================================
+
+/**
+ * Build market URL for a platform
+ * Polymarket: https://polymarket.com/event/{slug}
+ * Kalshi: https://kalshi.com/events/{ticker}
+ */
+function buildMarketUrl(source: ArbitrageMarketSource, identifier: string): string {
+  if (source === 'polymarket') {
+    return `https://polymarket.com/event/${identifier}`;
+  } else {
+    return `https://kalshi.com/events/${identifier}`;
+  }
 }
 
 // =============================================================================
@@ -162,6 +183,7 @@ async function fetchPolymarketEvent(slug: string): Promise<SourceEventData | nul
       eventTitle: event.title || slug.replace(/-/g, ' '),
       markets,
       source: 'polymarket',
+      identifier: event.slug || slug,
     };
   } catch (error) {
     console.error("Error fetching Polymarket event:", error);
@@ -176,14 +198,13 @@ async function fetchPolymarketEvent(slug: string): Promise<SourceEventData | nul
 async function fetchKalshiEvent(ticker: string): Promise<SourceEventData | null> {
   try {
     const response = await dflowRequest<{
-      event_ticker: string;
+      ticker: string;
       title?: string;
       markets: Array<{
         ticker: string;
-        title: string;
-        last_price: number;
-        yes_bid: number;
-        yes_ask: number;
+        yesSubTitle: string;
+        yesBid: string | null;
+        yesAsk: string | null;
       }>;
     }>(`/event/${ticker}`, {
       params: { withNestedMarkets: true },
@@ -193,9 +214,20 @@ async function fetchKalshiEvent(ticker: string): Promise<SourceEventData | null>
     const markets: SimplifiedMarket[] = [];
     if (response.markets && Array.isArray(response.markets)) {
       for (const market of response.markets) {
-        const title = market.title || '';
-        // Use last_price or mid of yes_bid/yes_ask
-        const yesPrice = market.last_price || ((market.yes_bid + market.yes_ask) / 2);
+        // Use yesSubTitle as the market name (e.g., "VR / Virtual Reality", "Trump", etc.)
+        const title = market.yesSubTitle || '';
+        
+        // Parse yes price from yesBid/yesAsk (they're strings like "0.0100")
+        let yesPrice = 50; // Default
+        if (market.yesBid && market.yesAsk) {
+          const bid = parseFloat(market.yesBid);
+          const ask = parseFloat(market.yesAsk);
+          yesPrice = ((bid + ask) / 2) * 100; // Convert to percentage
+        } else if (market.yesBid) {
+          yesPrice = parseFloat(market.yesBid) * 100;
+        } else if (market.yesAsk) {
+          yesPrice = parseFloat(market.yesAsk) * 100;
+        }
         
         if (title) {
           markets.push({ title, yesPrice });
@@ -207,6 +239,7 @@ async function fetchKalshiEvent(ticker: string): Promise<SourceEventData | null>
       eventTitle: response.title || ticker,
       markets,
       source: 'kalshi',
+      identifier: ticker, // Use original event ticker for URL
     };
   } catch (error) {
     console.error("Error fetching Kalshi event:", error);
@@ -220,11 +253,12 @@ async function fetchKalshiEvent(ticker: string): Promise<SourceEventData | null>
 
 /**
  * Search Polymarket for events matching query
+ * Uses public-search endpoint with events_status=open
  * Returns simplified market data (title + yes price)
  */
 async function searchPolymarket(query: string): Promise<SimplifiedMarket[]> {
   try {
-    const url = `${GAMMA_API_URL}/events?status=open&q=${encodeURIComponent(query)}`;
+    const url = `${GAMMA_API_URL}/public-search?q=${encodeURIComponent(query)}&events_status=open`;
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -232,12 +266,15 @@ async function searchPolymarket(query: string): Promise<SimplifiedMarket[]> {
       return [];
     }
     
-    const events = await response.json();
+    const data = await response.json();
     const markets: SimplifiedMarket[] = [];
     
-    // Extract all markets from all events
-    if (Array.isArray(events)) {
-      for (const event of events) {
+    // Response format: { events: [...], tags: [...], profiles: [...], pagination: {...} }
+    if (data.events && Array.isArray(data.events)) {
+      for (const event of data.events) {
+        // Get event slug for URL building
+        const eventSlug = event.slug;
+        
         if (event.markets && Array.isArray(event.markets)) {
           for (const market of event.markets) {
             const title = market.question || market.title || '';
@@ -245,6 +282,7 @@ async function searchPolymarket(query: string): Promise<SimplifiedMarket[]> {
             
             if (market.outcomePrices) {
               try {
+                // outcomePrices is a JSON string like "[\"0.205\", \"0.795\"]"
                 const prices = JSON.parse(market.outcomePrices);
                 yesPrice = parseFloat(prices[0]) * 100;
               } catch {
@@ -253,7 +291,11 @@ async function searchPolymarket(query: string): Promise<SimplifiedMarket[]> {
             }
             
             if (title) {
-              markets.push({ title, yesPrice });
+              markets.push({ 
+                title, 
+                yesPrice,
+                identifier: eventSlug, // Event slug for Polymarket URL
+              });
             }
           }
         }
@@ -281,6 +323,7 @@ async function searchKalshi(query: string): Promise<SimplifiedMarket[]> {
         markets?: Array<{
           ticker: string;
           title: string;
+          yesSubTitle?: string;
           yesAsk?: string;
           yesBid?: string;
         }>;
@@ -297,23 +340,33 @@ async function searchKalshi(query: string): Promise<SimplifiedMarket[]> {
     
     if (response.events && Array.isArray(response.events)) {
       for (const event of response.events) {
+        // Get event ticker for URL building (e.g., KXMNDAYCARECHARGE)
+        const eventTicker = event.ticker;
+        
         if (event.markets && Array.isArray(event.markets)) {
           for (const market of event.markets) {
-            const title = market.title || '';
-            // Calculate yes price from yesAsk/yesBid
+            // Use yesSubTitle if available (specific outcome), otherwise use title
+            const title = market.yesSubTitle || market.title || '';
+            
+            // Calculate yes price from yesAsk/yesBid (strings like "0.0100")
+            // Multiply by 100 to convert to percentage
             let yesPrice = 50;
             if (market.yesAsk && market.yesBid) {
               const ask = parseFloat(market.yesAsk);
               const bid = parseFloat(market.yesBid);
-              yesPrice = (ask + bid) / 2;
+              yesPrice = ((ask + bid) / 2) * 100;
             } else if (market.yesAsk) {
-              yesPrice = parseFloat(market.yesAsk);
+              yesPrice = parseFloat(market.yesAsk) * 100;
             } else if (market.yesBid) {
-              yesPrice = parseFloat(market.yesBid);
+              yesPrice = parseFloat(market.yesBid) * 100;
             }
             
             if (title) {
-              markets.push({ title, yesPrice });
+              markets.push({ 
+                title, 
+                yesPrice,
+                identifier: eventTicker, // Event ticker for Kalshi URL
+              });
             }
           }
         }
@@ -414,14 +467,31 @@ async function analyzeArbitrage(
   modelUsed: string;
   tokensUsed?: number;
 }> {
+  // Log source markets (from pasted URL)
+  const sourcePlatformName = sourceEvent.source === 'polymarket' ? 'Polymarket' : 'Kalshi';
+  console.log(`\n=== Data going to Arbitrage Agent ===`);
+  console.log(`\n[Source: ${sourcePlatformName}] Event: "${sourceEvent.eventTitle}"`);
+  console.log(`Source Markets (${sourceEvent.markets.length}):`);
+  sourceEvent.markets.forEach((m, i) => {
+    console.log(`  ${i + 1}. "${m.title}" - YES: ${m.yesPrice.toFixed(1)}%`);
+  });
+  
+  // Log search results (from other platform)
+  const searchPlatformName = searchPlatform === 'polymarket' ? 'Polymarket' : 'Kalshi';
+  console.log(`\n[Search Results: ${searchPlatformName}] (${searchResults.length} markets):`);
+  searchResults.forEach((m, i) => {
+    console.log(`  ${i + 1}. "${m.title}" - YES: ${m.yesPrice.toFixed(1)}%`);
+  });
+  console.log(`\n=====================================\n`);
+
   // Convert source event to ArbitrageMarketData format for the prompt
   const sourceMarket: ArbitrageMarketData = {
     source: sourceEvent.source,
     name: sourceEvent.eventTitle,
-    identifier: sourceEvent.eventTitle,
+    identifier: sourceEvent.identifier,
     yesPrice: sourceEvent.markets[0]?.yesPrice || 50,
     noPrice: 100 - (sourceEvent.markets[0]?.yesPrice || 50),
-    url: '',
+    url: buildMarketUrl(sourceEvent.source, sourceEvent.identifier),
   };
   
   // Include all source markets in raw data
@@ -523,7 +593,7 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log("Arbitrage finder received request:", req.method);
+  console.log("Arbitrage intelligence received request:", req.method);
 
   try {
     // Validate request method
@@ -649,19 +719,19 @@ Deno.serve(async (req: Request) => {
           polymarketData: sourcePlatform === 'polymarket' ? {
             source: 'polymarket',
             name: sourceEvent.eventTitle,
-            identifier: sourceEvent.eventTitle,
+            identifier: sourceEvent.identifier,
             yesPrice: sourceEvent.markets[0]?.yesPrice || 50,
             noPrice: 100 - (sourceEvent.markets[0]?.yesPrice || 50),
-            url: url,
+            url: buildMarketUrl('polymarket', sourceEvent.identifier),
             rawData: { eventTitle: sourceEvent.eventTitle, markets: sourceEvent.markets },
           } : undefined,
           kalshiData: sourcePlatform === 'kalshi' ? {
             source: 'kalshi',
             name: sourceEvent.eventTitle,
-            identifier: sourceEvent.eventTitle,
+            identifier: sourceEvent.identifier,
             yesPrice: sourceEvent.markets[0]?.yesPrice || 50,
             noPrice: 100 - (sourceEvent.markets[0]?.yesPrice || 50),
-            url: url,
+            url: buildMarketUrl('kalshi', sourceEvent.identifier),
             rawData: { eventTitle: sourceEvent.eventTitle, markets: sourceEvent.markets },
           } : undefined,
           arbitrage: {

@@ -136,28 +136,17 @@ const ArbitrageTerminal = () => {
         </div>
       )}
 
-      <div className="flex gap-2">
+      {market.url && (
         <a
           href={market.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-secondary hover:bg-secondary/80 transition-colors"
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-secondary hover:bg-secondary/80 transition-colors"
         >
           <ExternalLink className="w-3 h-3" />
           View Market
         </a>
-        {market.okbetUrl && (
-          <a
-            href={market.okbetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-warning/20 text-warning hover:bg-warning/30 transition-colors"
-          >
-            <Image src="/okbet.svg" alt="OkBet" width={14} height={14} />
-            OkBet
-          </a>
-        )}
-      </div>
+      )}
     </div>
   );
 
@@ -172,7 +161,7 @@ const ArbitrageTerminal = () => {
             </div>
             <div>
               <h1 className="text-xl font-display font-bold text-foreground">
-                Arbitrage Finder
+                Arbitrage Intelligence
               </h1>
               <p className="text-sm text-muted-foreground">
                 Find arbitrage across Polymarket and Kalshi
