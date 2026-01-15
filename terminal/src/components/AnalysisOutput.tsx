@@ -23,7 +23,13 @@ const AnalysisOutput = ({ analysis, timestamp, marketUrl, polyfactualResearch }:
 
   const verdict = getVerdict();
 
-  const allLines = [
+  interface LineItem {
+    type: string;
+    content: string;
+    title?: string;
+  }
+
+  const allLines: LineItem[] = [
     { type: "header", content: `MARKET: ${analysis.title}` },
     { type: "info", content: `EVENT: ${analysis.event_ticker}` },
     { type: "info", content: `TICKER: ${analysis.ticker}` },
@@ -71,8 +77,8 @@ const AnalysisOutput = ({ analysis, timestamp, marketUrl, polyfactualResearch }:
       { type: "polyfactual-answer", content: polyfactualResearch.answer },
       ...(polyfactualResearch.citations && polyfactualResearch.citations.length > 0 ? [
         { type: "polyfactual-citations-label", content: "Citations:" },
-        ...polyfactualResearch.citations.map(citation => ({ 
-          type: "polyfactual-citation", 
+        ...polyfactualResearch.citations.map(citation => ({
+          type: "polyfactual-citation",
           content: citation.url || citation.title || 'Unknown source',
           title: citation.title,
         })),
