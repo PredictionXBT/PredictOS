@@ -99,7 +99,7 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 
 ### Key Features
 
-- **Multi-Model Support** — Mix and match xAI Grok (4.1, 4) and OpenAI GPT (5.2, 5.1, 4.1) models
+- **Multi-Model Support** — Mix and match xAI Grok (4.1, 4), OpenAI GPT (5.2, 5.1, 4.1), and BlockRun models (20+ models via x402 micropayments)
 - **Tool-Augmented Analysis** — Agents can use X (Twitter) search, Web search, Polyfactual deep research, and x402/PayAI sellers
 - **Custom Commands** — Direct agent focus with natural language instructions
 - **Real-Time Pipeline Visualization** — Watch agents work through the analysis pipeline
@@ -182,9 +182,10 @@ PredictOS/
 └── supabase/                        # Backend (Supabase Edge Functions)
     └── functions/
         ├── _shared/                 # Shared utilities
-        │   ├── ai/                  # AI integrations (xAI Grok & OpenAI)
+        │   ├── ai/                  # AI integrations (xAI Grok, OpenAI & BlockRun)
         │   │   ├── callGrok.ts
         │   │   ├── callOpenAI.ts
+        │   │   ├── callBlockRun.ts  # BlockRun x402 integration (20+ models via micropayments)
         │   │   └── prompts/         # Agent prompts
         │   │       ├── arbitrageAnalysis.ts      # Arbitrage comparison prompt
         │   │       └── searchQueryGenerator.ts   # Cross-platform search prompt
@@ -253,9 +254,10 @@ Example for Super Intelligence (full setup):
 DOME_API_KEY=your_dome_api_key              # Get from https://dashboard.domeapi.io (for Polymarket)
 DFLOW_API_KEY=your_dflow_api_key            # Contact DFlow: https://x.com/dflow (for Kalshi)
 
-# AI Providers (configure one or both)
+# AI Providers (configure one or more)
 XAI_API_KEY=your_xai_api_key                # Get from https://x.ai
 OPENAI_API_KEY=your_openai_api_key          # Get from https://platform.openai.com
+BLOCKRUN_WALLET_KEY=your_base_wallet_key    # Base chain private key - no API key needed, just a wallet. Get USDC on Base.
 
 # Polyfactual Tool (optional, enables Polyfactual research tool)
 POLYFACTUAL_API_KEY=your_polyfactual_key    # Contact Polyfactual to obtain
@@ -441,6 +443,19 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
       <p><strong>The high-performance datachain unifying storage and native smart contract execution.</strong></p>
       <p>🔗 PredictOS integrates IRYS to power <strong>Verifiable Agents</strong> — permanently storing all agent analysis, recommendations, and execution results on the blockchain for transparent, auditable AI predictions. This creates an immutable record of agent decisions that anyone can verify.</p>
       <p><a href="https://irys.xyz/">🌐 Website</a> · <a href="https://docs.irys.xyz/">📖 Docs</a> · <a href="https://x.com/irys_xyz">𝕏 Twitter</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="120" align="center">
+      <a href="https://blockrun.ai/">
+        <img src="https://blockrun.ai/icon-white.png" alt="BlockRun" width="80" height="80" style="background: #000; border-radius: 12px; padding: 8px;" />
+      </a>
+    </td>
+    <td>
+      <h3><a href="https://blockrun.ai/">BlockRun</a></h3>
+      <p><strong>Discovery and gateway for x402 AI services.</strong> BlockRun provides pay-per-request access to 20+ AI models (GPT, Claude, Gemini, Grok, DeepSeek) via x402 micropayments. No API key needed — just a Base chain wallet.</p>
+      <p>🔗 PredictOS integrates BlockRun as an alternative AI provider for Super Intelligence — enabling wallet-based, pay-per-request access to multiple LLM providers without managing separate API keys. Simply fund your wallet with USDC on Base and access any model.</p>
+      <p><a href="https://blockrun.ai/">🌐 Website</a> · <a href="https://blockrun.ai/docs">📖 Docs</a> · <a href="https://x.com/BlockRunAI">𝕏 Twitter</a></p>
     </td>
   </tr>
   <tr>
