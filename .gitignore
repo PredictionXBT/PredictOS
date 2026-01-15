@@ -1,0 +1,11 @@
+# secrets
+.env
+.env.*
+!.env.example
+.env.local
+supabase/.env
+supabase/.env.*
+supabase/functions/.env
+*.pem
+*.key
+secrets.*
