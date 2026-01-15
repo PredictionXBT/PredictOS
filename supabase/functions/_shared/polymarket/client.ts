@@ -208,7 +208,7 @@ export class PolymarketClient {
           price: order.price,
           side: order.side === "BUY" ? Side.BUY : Side.SELL,
           size: Math.floor(order.size),
-          feeRateBps: 0,
+          feeRateBps: 1000,
         },
         {
           tickSize: DEFAULT_TICK_SIZE,
