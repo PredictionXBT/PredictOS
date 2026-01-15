@@ -224,6 +224,49 @@ After setting up your environment variables:
 | "Insufficient balance" | Fund your Polymarket wallet with USDC |
 | "Order failed" | Check that your proxy wallet is properly set up on Polymarket |
 
+## Wallet Types and Signature Types
+
+PredictOS supports multiple wallet types for Polymarket trading:
+
+### Signature Type 1 - EOA/Private Key Wallets (Default)
+
+For standard Ethereum wallets using private keys:
+
+```env
+POLYMARKET_WALLET_PRIVATE_KEY=0x...
+POLYMARKET_PROXY_WALLET_ADDRESS=0x...
+POLYMARKET_SIGNATURE_TYPE=1
+```
+
+**Use this for:**
+- Standard private key wallets
+- Automated trading bots
+- Email/Magic login wallets
+
+### Signature Type 2 - Gnosis Safe / Browser Wallets
+
+For browser-based wallets like MetaMask, WalletConnect, etc.:
+
+```env
+POLYMARKET_WALLET_PRIVATE_KEY=0x...
+POLYMARKET_PROXY_WALLET_ADDRESS=0x...
+POLYMARKET_SIGNATURE_TYPE=2
+```
+
+**Use this for:**
+- MetaMask wallets
+- WalletConnect integrations
+- Gnosis Safe multisig wallets
+- Hardware wallets via browser
+
+### How to Choose
+
+- If you're using a private key directly (most automated bots): Use **Type 1**
+- If you're signing transactions through a browser wallet: Use **Type 2**
+- When in doubt, try Type 1 first (it's the default)
+
+**Note:** The signature type affects how orders are signed with the Polymarket CLOB. Using the wrong type will result in order placement failures.
+
 ## Security Considerations
 
 ⚠️ **Important Security Notes:**
