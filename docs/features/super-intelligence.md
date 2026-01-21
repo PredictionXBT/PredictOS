@@ -225,7 +225,7 @@ DFLOW_API_KEY=your_dflow_api_key
 
 #### 2. AI Provider API Keys (At least one required)
 
-You need **at least one** of the following AI provider keys:
+You need **at least one** of the following AI provider configurations:
 
 ##### Option A: xAI Grok (Recommended for tool use)
 
@@ -257,7 +257,25 @@ OPENAI_API_KEY=your_openai_api_key
 3. Navigate to API Keys
 4. Generate a new API key
 
-> 💡 **Note:** Configure both providers to mix and match models across agents. For example, use Grok with X Search for social sentiment and GPT for broader analysis.
+##### Option C: BlockRun (20+ models via x402 micropayments)
+
+```env
+BLOCKRUN_WALLET_KEY=0x_your_base_wallet_private_key
+```
+
+**Models available:** GPT-4o, GPT-5, Claude Sonnet 4, Claude Opus 4, Grok 3, Gemini 2.5 Pro, DeepSeek, Qwen, and more
+
+**Unique features:** No API keys needed — wallet-based pay-per-request access to 20+ models from OpenAI, Anthropic, xAI, Google, DeepSeek, and Qwen
+
+**How to get it:**
+1. Create or use an existing EVM wallet (MetaMask, Rabby, Coinbase Wallet)
+2. Fund with USDC on Base mainnet
+3. Export your private key (0x-prefixed hex)
+4. Add to `.env.local`
+
+> 📖 **[Full BlockRun Setup Guide →](blockrun-setup.md)**
+
+> 💡 **Note:** Configure multiple providers to mix and match models across agents. For example, use Grok with X Search for social sentiment, GPT for broader analysis, and Claude for nuanced reasoning.
 
 #### 3. Polyfactual API Key (Optional)
 
@@ -336,6 +354,10 @@ XAI_API_KEY=your_xai_api_key
 # OpenAI - Alternative/additional provider
 OPENAI_API_KEY=your_openai_api_key
 
+# BlockRun - Access 20+ models via x402 micropayments (no API key needed)
+# Just a Base chain wallet funded with USDC
+BLOCKRUN_WALLET_KEY=0x_your_base_wallet_private_key
+
 # =============================================================================
 # AGENT TOOLS (Optional)
 # =============================================================================
@@ -386,6 +408,11 @@ Each agent needs a model selected:
 | OpenAI | GPT-5.1 | Strong analysis, faster |
 | OpenAI | GPT-5 Nano | Lightweight, fastest |
 | OpenAI | GPT-4.1 / GPT-4.1 Mini | Cost-effective options |
+| BlockRun | blockrun/gpt-5, blockrun/gpt-4o | OpenAI models via micropayments |
+| BlockRun | blockrun/claude-opus-4, blockrun/claude-sonnet-4 | Anthropic models via micropayments |
+| BlockRun | blockrun/grok-3, blockrun/grok-3-fast | xAI models via micropayments |
+| BlockRun | blockrun/gemini-2.5-pro | Google models via micropayments |
+| BlockRun | blockrun/deepseek-reasoner | DeepSeek models via micropayments |
 
 #### Select Tools (Optional)
 
@@ -604,7 +631,9 @@ Dome provides Polymarket market data and trading capabilities.
 |-------|----------|
 | "DOME_API_KEY is not configured" | Add your Dome API key to `.env.local` (required for Polymarket) |
 | "DFLOW_API_KEY is not configured" | Add your DFlow API key to `.env.local` (required for Kalshi) |
-| "No AI provider configured" | Add either XAI_API_KEY or OPENAI_API_KEY |
+| "No AI provider configured" | Add XAI_API_KEY, OPENAI_API_KEY, or BLOCKRUN_WALLET_KEY |
+| "BLOCKRUN_WALLET_KEY environment variable is not set" | Add your Base chain private key to `.env.local` |
+| "BlockRun payment failed" | Check your USDC balance on Base mainnet |
 | "Please select a model for all agents" | Choose a model from the dropdown for each agent |
 | "Please select a model for the aggregator" | Choose a model for the Bookmaker Agent |
 | "Agents recommend NO TRADE" | Agents found insufficient alpha opportunity |
@@ -646,6 +675,14 @@ Dome provides Polymarket market data and trading capabilities.
 - Agent 1: GPT-5.2 + Polyfactual + Command: "Focus on historical data"
 - Agent 2: GPT-5.2 + Polyfactual + Command: "Focus on recent developments"
 - Aggregator: GPT-5.2
+
+**Multi-Provider via BlockRun (Diverse Perspectives):**
+- Agent 1: blockrun/gpt-5 — OpenAI's latest for broad analysis
+- Agent 2: blockrun/claude-opus-4 — Anthropic's best for nuanced reasoning
+- Agent 3: blockrun/grok-3 — xAI for X/Twitter-aware insights
+- Aggregator: blockrun/gemini-2.5-pro — Google's model for synthesis
+
+> 💡 **Tip:** Using BlockRun gives you access to models from multiple providers with a single wallet. This diversity can improve prediction accuracy by avoiding single-model biases.
 
 ---
 

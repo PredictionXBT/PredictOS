@@ -118,6 +118,7 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 | **⚖️ Arbitrage Intelligence** | ✅ Released | AI-powered cross-platform arbitrage detection between Polymarket and Kalshi. Paste any market URL, and the system automatically searches for the same market on the other platform, compares prices, and provides actionable arbitrage strategies with profit calculations. | [📖 Setup Guide](docs/features/arbitrage-intelligence.md) |
 | **🛡️ Verifiable Agents** | ✅ Released | Permanently store agent analysis on [Irys](https://irys.xyz/) blockchain for transparent, verifiable AI predictions. Supports both devnet (free, temporary) and mainnet (permanent). | [📖 Setup Guide](docs/features/verifiable-agents.md) |
 | **💸 x402 / PayAI Integration** | ✅ Released | Access paid AI services and data providers through the x402 protocol. Browse the PayAI bazaar, select sellers, and pay with USDC on Solana or Base. Use as a tool in your Predict Agents. | [📖 Setup Guide](docs/features/x402-integration.md) |
+| **🤖 BlockRun AI Provider** | ✅ Released | Access 20+ AI models (GPT, Claude, Grok, Gemini, DeepSeek) via x402 micropayments. No API keys needed — just a Base wallet with USDC. | [📖 Setup Guide](docs/features/blockrun-setup.md) |
 | **Betting Bots** | ✅ Released | Polymarket 15 Minute Up/Down Arbitrage Bot — **Vanilla Mode** (single price straddle) and **Ladder Mode** (multi-level tapered allocation for maximized fill rates) | [📖 Setup Guide](docs/features/betting-bots.md) |
 | **Wallet Tracking** | ✅ Released | Real-time order tracking for any Polymarket wallets using Dome SDK WebSockets — 10 seconds faster than hosted bots | [📖 Setup Guide](docs/features/wallet-tracking.md) |
 
@@ -448,13 +449,13 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
   <tr>
     <td width="120" align="center">
       <a href="https://blockrun.ai/">
-        <img src="https://blockrun.ai/icon-white.png" alt="BlockRun" width="80" height="80" style="background: #000; border-radius: 12px; padding: 8px;" />
+        <img src="https://blockrun.ai/brand/logo-256.png" alt="BlockRun" width="80" height="80" />
       </a>
     </td>
     <td>
       <h3><a href="https://blockrun.ai/">BlockRun</a></h3>
       <p><strong>Discovery and gateway for x402 AI services.</strong> BlockRun provides pay-per-request access to 20+ AI models (GPT, Claude, Gemini, Grok, DeepSeek) via x402 micropayments. No API key needed — just a Base chain wallet.</p>
-      <p>🔗 PredictOS integrates BlockRun as an alternative AI provider for Super Intelligence — enabling wallet-based, pay-per-request access to multiple LLM providers without managing separate API keys. Simply fund your wallet with USDC on Base and access any model.</p>
+      <p>🔗 PredictOS integrates BlockRun as an alternative AI provider for Super Intelligence — enabling wallet-based, pay-per-request access to multiple LLM providers without managing separate API keys. Simply fund your wallet with USDC on Base and access any model. <a href="docs/features/blockrun-setup.md">📖 Setup Guide</a></p>
       <p><a href="https://blockrun.ai/">🌐 Website</a> · <a href="https://blockrun.ai/docs">📖 Docs</a> · <a href="https://x.com/BlockRunAI">𝕏 Twitter</a></p>
     </td>
   </tr>
