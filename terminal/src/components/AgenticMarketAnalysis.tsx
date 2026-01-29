@@ -58,7 +58,7 @@ type AIModel = string;
 interface ModelOption {
   value: AIModel;
   label: string;
-  provider: "grok" | "openai";
+  provider: "grok" | "openai" | "blockrun";
 }
 
 const GROK_MODELS: ModelOption[] = [
@@ -76,7 +76,32 @@ const OPENAI_MODELS: ModelOption[] = [
   { value: "gpt-4.1-mini", label: "GPT-4.1 Mini", provider: "openai" },
 ];
 
-const ALL_MODELS: ModelOption[] = [...GROK_MODELS, ...OPENAI_MODELS];
+// BlockRun models - wallet-based access to 20+ AI models (no API keys needed)
+const BLOCKRUN_MODELS: ModelOption[] = [
+  // OpenAI via BlockRun
+  { value: "blockrun/gpt-4o", label: "GPT-4o (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/gpt-4o-mini", label: "GPT-4o Mini (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/gpt-5", label: "GPT-5 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/o1", label: "o1 (BlockRun)", provider: "blockrun" },
+  // Anthropic via BlockRun
+  { value: "blockrun/claude-sonnet-4", label: "Claude Sonnet 4 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/claude-opus-4", label: "Claude Opus 4 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/claude-haiku", label: "Claude Haiku (BlockRun)", provider: "blockrun" },
+  // xAI via BlockRun
+  { value: "blockrun/grok-3", label: "Grok 3 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/grok-3-fast", label: "Grok 3 Fast (BlockRun)", provider: "blockrun" },
+  // Google via BlockRun
+  { value: "blockrun/gemini-2.5-pro", label: "Gemini 2.5 Pro (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/gemini-2.5-flash", label: "Gemini 2.5 Flash (BlockRun)", provider: "blockrun" },
+  // DeepSeek via BlockRun
+  { value: "blockrun/deepseek-chat", label: "DeepSeek Chat (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/deepseek-reasoner", label: "DeepSeek Reasoner (BlockRun)", provider: "blockrun" },
+  // Qwen via BlockRun
+  { value: "blockrun/qwen-max", label: "Qwen Max (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/qwen-plus", label: "Qwen Plus (BlockRun)", provider: "blockrun" },
+];
+
+const ALL_MODELS: ModelOption[] = [...GROK_MODELS, ...OPENAI_MODELS, ...BLOCKRUN_MODELS];
 
 // Tool options
 interface ToolOption {
@@ -97,6 +122,13 @@ const TOOL_OPTIONS: ToolOption[] = [
  */
 function isOpenAIModel(model: string): boolean {
   return OPENAI_MODELS.some(m => m.value === model) || model.startsWith("gpt-");
+}
+
+/**
+ * Check if a model is a BlockRun model
+ */
+function isBlockRunModel(model: string): boolean {
+  return BLOCKRUN_MODELS.some(m => m.value === model) || model.startsWith("blockrun/");
 }
 
 // URL type detection
@@ -253,7 +285,9 @@ const AgenticMarketAnalysis = () => {
 
   const getProviderBadge = (model: string) => {
     const modelOption = ALL_MODELS.find(m => m.value === model);
-    return modelOption?.provider === "openai" ? "OpenAI" : "xAI";
+    if (modelOption?.provider === "openai") return "OpenAI";
+    if (modelOption?.provider === "blockrun") return "BlockRun";
+    return "xAI";
   };
 
   const addAgent = () => {
@@ -1075,8 +1109,10 @@ const AgenticMarketAnalysis = () => {
       >
         {selectedModel && (
           <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-            getProviderBadge(selectedModel) === "OpenAI" 
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50" 
+            getProviderBadge(selectedModel) === "OpenAI"
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
+              : getProviderBadge(selectedModel) === "BlockRun"
+              ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/50"
               : "bg-orange-500/20 text-orange-400 border border-orange-500/50"
           }`}>
             {getProviderBadge(selectedModel)}
@@ -1146,7 +1182,38 @@ const AgenticMarketAnalysis = () => {
               </div>
             </>
           )}
-          
+
+          {/* BlockRun Section - Only show if not restricted to Grok */}
+          {!restrictToGrok && (
+            <>
+              <div className="px-3 py-2 bg-cyan-500/10 border-y border-border sticky top-0 z-10">
+                <div className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/50">
+                    BlockRun
+                  </span>
+                  <span className="text-xs font-semibold text-cyan-400">20+ Models (No API Key)</span>
+                </div>
+              </div>
+              <div className="py-1">
+                {BLOCKRUN_MODELS.map((model) => (
+                  <button
+                    key={model.value}
+                    type="button"
+                    onClick={() => onSelect(model.value)}
+                    className={`w-full px-4 py-2.5 text-left text-sm font-mono transition-colors ${
+                      selectedModel === model.value
+                        ? 'bg-primary/20 text-primary'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    }`}
+                  >
+                    <span className="block">{model.label}</span>
+                    <span className="block text-[10px] opacity-60 mt-0.5">{model.value}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
           {/* Info message when restricted to Grok */}
           {restrictToGrok && (
             <div className="px-3 py-2 border-t border-border bg-secondary/30">

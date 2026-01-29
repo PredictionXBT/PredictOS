@@ -27,7 +27,7 @@ type AIModel = string;
 interface ModelOption {
   value: AIModel;
   label: string;
-  provider: "grok" | "openai";
+  provider: "grok" | "openai" | "blockrun";
 }
 
 const GROK_MODELS: ModelOption[] = [
@@ -45,7 +45,32 @@ const OPENAI_MODELS: ModelOption[] = [
   { value: "gpt-4.1-mini", label: "GPT-4.1 Mini", provider: "openai" },
 ];
 
-const ALL_MODELS: ModelOption[] = [...GROK_MODELS, ...OPENAI_MODELS];
+// BlockRun models - wallet-based access to 20+ AI models (no API keys needed)
+const BLOCKRUN_MODELS: ModelOption[] = [
+  // OpenAI via BlockRun
+  { value: "blockrun/gpt-4o", label: "GPT-4o (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/gpt-4o-mini", label: "GPT-4o Mini (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/gpt-5", label: "GPT-5 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/o1", label: "o1 (BlockRun)", provider: "blockrun" },
+  // Anthropic via BlockRun
+  { value: "blockrun/claude-sonnet-4", label: "Claude Sonnet 4 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/claude-opus-4", label: "Claude Opus 4 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/claude-haiku", label: "Claude Haiku (BlockRun)", provider: "blockrun" },
+  // xAI via BlockRun
+  { value: "blockrun/grok-3", label: "Grok 3 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/grok-3-fast", label: "Grok 3 Fast (BlockRun)", provider: "blockrun" },
+  // Google via BlockRun
+  { value: "blockrun/gemini-2.5-pro", label: "Gemini 2.5 Pro (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/gemini-2.5-flash", label: "Gemini 2.5 Flash (BlockRun)", provider: "blockrun" },
+  // DeepSeek via BlockRun
+  { value: "blockrun/deepseek-chat", label: "DeepSeek Chat (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/deepseek-reasoner", label: "DeepSeek Reasoner (BlockRun)", provider: "blockrun" },
+  // Qwen via BlockRun
+  { value: "blockrun/qwen-max", label: "Qwen Max (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/qwen-plus", label: "Qwen Plus (BlockRun)", provider: "blockrun" },
+];
+
+const ALL_MODELS: ModelOption[] = [...GROK_MODELS, ...OPENAI_MODELS, ...BLOCKRUN_MODELS];
 
 // URL type detection
 function detectUrlType(url: string): 'kalshi' | 'polymarket' | 'none' {
@@ -297,6 +322,26 @@ const ArbitrageTerminal = () => {
                         OpenAI Models
                       </div>
                       {OPENAI_MODELS.map((m) => (
+                        <button
+                          key={m.value}
+                          onClick={() => {
+                            setModel(m.value);
+                            setDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                            model === m.value
+                              ? 'bg-primary/20 text-primary'
+                              : 'hover:bg-secondary text-foreground'
+                          }`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+
+                      <div className="text-[10px] font-mono text-cyan-400 uppercase tracking-wider px-2 py-1 mt-2">
+                        BlockRun (No API Key)
+                      </div>
+                      {BLOCKRUN_MODELS.map((m) => (
                         <button
                           key={m.value}
                           onClick={() => {

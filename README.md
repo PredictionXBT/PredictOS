@@ -99,7 +99,7 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 
 ### Key Features
 
-- **Multi-Model Support** — Mix and match xAI Grok (4.1, 4) and OpenAI GPT (5.2, 5.1, 4.1) models
+- **Multi-Model Support** — Mix and match xAI Grok, OpenAI GPT, and 20+ models via BlockRun (no API keys needed)
 - **Tool-Augmented Analysis** — Agents can use X (Twitter) search, Web search, Polyfactual deep research, and x402/PayAI sellers
 - **Custom Commands** — Direct agent focus with natural language instructions
 - **Real-Time Pipeline Visualization** — Watch agents work through the analysis pipeline
@@ -242,9 +242,28 @@ cp .env.example .env.local
 Edit `.env.local` with the credentials required for the features you want to use:
 
 > 📖 **Feature-specific setup guides:**
-> - **Super Intelligence:** [docs/features/super-intelligence.md](docs/features/super-intelligence.md) — requires `DOME_API_KEY` (Polymarket) + `DFLOW_API_KEY` (Kalshi) + AI provider keys (`XAI_API_KEY` and/or `OPENAI_API_KEY`). Optional: `POLYFACTUAL_API_KEY` for Polyfactual tool. For Autonomous mode: `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`.
+> - **Super Intelligence:** [docs/features/super-intelligence.md](docs/features/super-intelligence.md) — requires `DOME_API_KEY` (Polymarket) + `DFLOW_API_KEY` (Kalshi) + AI provider keys (`XAI_API_KEY` and/or `OPENAI_API_KEY` or `BLOCKRUN_WALLET_KEY`). Optional: `POLYFACTUAL_API_KEY` for Polyfactual tool. For Autonomous mode: `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`.
 > - **Betting Bots:** [docs/features/betting-bots.md](docs/features/betting-bots.md) — requires `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`
 > - **Wallet Tracking:** [docs/features/wallet-tracking.md](docs/features/wallet-tracking.md) — requires `DOME_API_KEY` (frontend only, no Supabase needed)
+> - **BlockRun AI (No API Keys):** [docs/features/blockrun-setup.md](docs/features/blockrun-setup.md) — access 20+ AI models with just a wallet. No API key signup needed.
+
+### 🚀 Quick Start: Use BlockRun (No API Keys Required)
+
+Instead of managing multiple AI provider API keys, you can use **BlockRun** for wallet-based access to 20+ models including GPT-5, Claude Opus 4, Grok 3, Gemini 2.5, DeepSeek, and more:
+
+1. **Get a Base wallet** — MetaMask, Rabby, or Coinbase Wallet
+2. **Fund with USDC on Base** — $10-50 to start
+3. **Add to `.env.local`:**
+   ```env
+   BLOCKRUN_WALLET_KEY=0x_your_private_key
+   ```
+4. **Select any `blockrun/*` model** in the UI dropdown
+
+No API key signups. Pay only for what you use. Self-custody your funds.
+
+> 📖 **[Full BlockRun Setup Guide →](docs/features/blockrun-setup.md)**
+
+---
 
 Example for Super Intelligence (full setup):
 
@@ -253,9 +272,10 @@ Example for Super Intelligence (full setup):
 DOME_API_KEY=your_dome_api_key              # Get from https://dashboard.domeapi.io (for Polymarket)
 DFLOW_API_KEY=your_dflow_api_key            # Contact DFlow: https://x.com/dflow (for Kalshi)
 
-# AI Providers (configure one or both)
+# AI Providers (configure one or more)
 XAI_API_KEY=your_xai_api_key                # Get from https://x.ai
 OPENAI_API_KEY=your_openai_api_key          # Get from https://platform.openai.com
+BLOCKRUN_WALLET_KEY=0x...                   # Your Base wallet private key (for BlockRun - no API keys needed!)
 
 # Polyfactual Tool (optional, enables Polyfactual research tool)
 POLYFACTUAL_API_KEY=your_polyfactual_key    # Contact Polyfactual to obtain
