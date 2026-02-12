@@ -214,7 +214,7 @@ const AnalysisOutput = ({ analysis, timestamp, marketUrl, polyfactualResearch }:
                 className="flex items-center gap-2 hover:underline"
               >
                 <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">{'title' in line && line.title ? line.title : line.content}</span>
+                <span className="truncate">{('title' in line && line.title) ? String(line.title) : line.content}</span>
               </a>
             ) : (
               line.content

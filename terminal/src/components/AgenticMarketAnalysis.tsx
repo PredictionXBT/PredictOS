@@ -28,16 +28,17 @@ import {
   Upload,
 } from "lucide-react";
 import Image from "next/image";
-import type { 
-  AgentConfig, 
-  AggregatorConfig, 
-  GetEventsResponse, 
+import type {
+  AgentConfig,
+  AggregatorConfig,
+  GetEventsResponse,
   EventAnalysisAgentResponse,
   AnalysisAggregatorResponse,
   PmType,
   UrlSource,
   MarketAnalysis,
   GrokTool,
+  BlockRunTool,
   AgentTool,
   PolyfactualResearchResult,
   IrysUploadStatus,
@@ -58,7 +59,7 @@ type AIModel = string;
 interface ModelOption {
   value: AIModel;
   label: string;
-  provider: "grok" | "openai";
+  provider: "grok" | "openai" | "blockrun";
 }
 
 const GROK_MODELS: ModelOption[] = [
@@ -76,18 +77,50 @@ const OPENAI_MODELS: ModelOption[] = [
   { value: "gpt-4.1-mini", label: "GPT-4.1 Mini", provider: "openai" },
 ];
 
-const ALL_MODELS: ModelOption[] = [...GROK_MODELS, ...OPENAI_MODELS];
+// BlockRun models - wallet-based access to 20+ AI models (no API keys needed)
+const BLOCKRUN_MODELS: ModelOption[] = [
+  // OpenAI via BlockRun
+  { value: "blockrun/gpt-4o", label: "GPT-4o (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/gpt-4o-mini", label: "GPT-4o Mini (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/gpt-5", label: "GPT-5 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/o1", label: "o1 (BlockRun)", provider: "blockrun" },
+  // Anthropic via BlockRun
+  { value: "blockrun/claude-sonnet-4", label: "Claude Sonnet 4 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/claude-opus-4", label: "Claude Opus 4 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/claude-haiku", label: "Claude Haiku (BlockRun)", provider: "blockrun" },
+  // xAI via BlockRun
+  { value: "blockrun/grok-3", label: "Grok 3 (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/grok-3-fast", label: "Grok 3 Fast (BlockRun)", provider: "blockrun" },
+  // Google via BlockRun
+  { value: "blockrun/gemini-2.5-pro", label: "Gemini 2.5 Pro (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/gemini-2.5-flash", label: "Gemini 2.5 Flash (BlockRun)", provider: "blockrun" },
+  // DeepSeek via BlockRun
+  { value: "blockrun/deepseek-chat", label: "DeepSeek Chat (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/deepseek-reasoner", label: "DeepSeek Reasoner (BlockRun)", provider: "blockrun" },
+  // Qwen via BlockRun
+  { value: "blockrun/qwen-max", label: "Qwen Max (BlockRun)", provider: "blockrun" },
+  { value: "blockrun/qwen-plus", label: "Qwen Plus (BlockRun)", provider: "blockrun" },
+];
+
+const ALL_MODELS: ModelOption[] = [...GROK_MODELS, ...OPENAI_MODELS, ...BLOCKRUN_MODELS];
 
 // Tool options
 interface ToolOption {
   value: AgentTool;
   label: string;
   grokOnly?: boolean;
+  blockrunOnly?: boolean;
+  provider?: "grok" | "blockrun";
 }
 
 const TOOL_OPTIONS: ToolOption[] = [
-  { value: "x_search", label: "X Search", grokOnly: true },
-  { value: "web_search", label: "Web Search", grokOnly: true },
+  // Grok tools (require direct xAI API key)
+  { value: "x_search", label: "X Search", grokOnly: true, provider: "grok" },
+  { value: "web_search", label: "Web Search", grokOnly: true, provider: "grok" },
+  // BlockRun tools (no API key, pay-as-you-go via wallet)
+  { value: "blockrun_x_search", label: "X Search (BlockRun)", blockrunOnly: true, provider: "blockrun" },
+  { value: "blockrun_web_search", label: "Web Search (BlockRun)", blockrunOnly: true, provider: "blockrun" },
+  // Universal tools (work with any model)
   { value: "x402", label: "PayAI sellers (x402)", grokOnly: false },
   { value: "polyfactual", label: "PolyFactual Research", grokOnly: false },
 ];
@@ -97,6 +130,13 @@ const TOOL_OPTIONS: ToolOption[] = [
  */
 function isOpenAIModel(model: string): boolean {
   return OPENAI_MODELS.some(m => m.value === model) || model.startsWith("gpt-");
+}
+
+/**
+ * Check if a model is a BlockRun model
+ */
+function isBlockRunModel(model: string): boolean {
+  return BLOCKRUN_MODELS.some(m => m.value === model) || model.startsWith("blockrun/");
 }
 
 // URL type detection
@@ -253,7 +293,9 @@ const AgenticMarketAnalysis = () => {
 
   const getProviderBadge = (model: string) => {
     const modelOption = ALL_MODELS.find(m => m.value === model);
-    return modelOption?.provider === "openai" ? "OpenAI" : "xAI";
+    if (modelOption?.provider === "openai") return "OpenAI";
+    if (modelOption?.provider === "blockrun") return "BlockRun";
+    return "xAI";
   };
 
   const addAgent = () => {
@@ -425,14 +467,20 @@ const AgenticMarketAnalysis = () => {
   const updateAgentModel = (agentId: string, model: string) => {
     setAgents(prev => prev.map(a => {
       if (a.id !== agentId) return a;
-      
-      // When switching to OpenAI, only keep polyfactual tool (not Grok-only tools)
+
+      // When switching to OpenAI or BlockRun, clear Grok-only tools (x_search, web_search)
+      // but keep BlockRun tools (blockrun_x_search, blockrun_web_search) and universal tools
       let newTools = a.tools;
-      if (isOpenAIModel(model) && a.tools) {
-        newTools = a.tools.filter(t => t === 'polyfactual') as AgentTool[];
+      if ((isOpenAIModel(model) || isBlockRunModel(model)) && a.tools) {
+        newTools = a.tools.filter(t =>
+          t === 'polyfactual' ||
+          t === 'x402' ||
+          t === 'blockrun_x_search' ||
+          t === 'blockrun_web_search'
+        ) as AgentTool[];
         if (newTools.length === 0) newTools = undefined;
       }
-      
+
       return { ...a, model, tools: newTools };
     }));
     setOpenDropdown(null);
@@ -445,25 +493,28 @@ const AgenticMarketAnalysis = () => {
       setOpenDropdown(null);
       return;
     }
-    
+
     setAgents(prev => prev.map(a => {
       if (a.id !== agentId) return a;
-      
+
       const currentTool = a.tools?.[0];
       const isSelected = currentTool === tool;
-      
+
       // Toggle: if same tool clicked, deselect; otherwise select the new one
       const newTools: AgentTool[] | undefined = isSelected ? undefined : [tool];
-      
-      // Check if this is a Grok-only tool
+
+      // Check if this is a Grok-only tool (requires direct xAI API)
       const isGrokOnlyTool = tool === 'x_search' || tool === 'web_search';
-      
-      // If selecting a Grok-only tool and current model is OpenAI or empty, switch to Grok
+      // Check if this is a BlockRun tool (works with any model via BlockRun's backend)
+      const isBlockRunTool = tool === 'blockrun_x_search' || tool === 'blockrun_web_search';
+
+      // If selecting a Grok-only tool and current model is OpenAI/BlockRun or empty, switch to Grok
       let newModel = a.model;
-      if (newTools && isGrokOnlyTool && (isOpenAIModel(a.model) || !a.model)) {
+      if (newTools && isGrokOnlyTool && (isOpenAIModel(a.model) || isBlockRunModel(a.model) || !a.model)) {
         newModel = "grok-4-1-fast-reasoning";
       }
-      
+      // BlockRun tools work with any model - no model switch needed
+
       // Clear PayAI seller if switching away from x402
       return { ...a, tools: newTools, model: newModel, x402Seller: undefined };
     }));
@@ -938,6 +989,8 @@ const AgenticMarketAnalysis = () => {
     switch (tool) {
       case 'x_search': return 'X Search';
       case 'web_search': return 'Web Search';
+      case 'blockrun_x_search': return 'X Search (BlockRun)';
+      case 'blockrun_web_search': return 'Web Search (BlockRun)';
       case 'polyfactual': return 'PolyFactual Research';
       default: return tool;
     }
@@ -947,6 +1000,8 @@ const AgenticMarketAnalysis = () => {
     switch (tool) {
       case 'x_search': return 'X';
       case 'web_search': return 'Web';
+      case 'blockrun_x_search': return 'X (BR)';
+      case 'blockrun_web_search': return 'Web (BR)';
       case 'polyfactual': return 'PF';
       case 'x402': return 'x402';
       default: return tool;
@@ -959,6 +1014,7 @@ const AgenticMarketAnalysis = () => {
     disabled: boolean,
     isOpenAI: boolean,
     zIndex: number,
+    selectedModel: string,
     x402Seller?: X402SellerConfig
   ) => {
     const dropdownId = `tools-${agentId}`;
@@ -1011,15 +1067,18 @@ const AgenticMarketAnalysis = () => {
             <div className="py-1">
               {TOOL_OPTIONS.map((tool) => {
                 const isSelected = selectedTools?.includes(tool.value);
-                const isGrokOnlyDisabled = tool.grokOnly && isOpenAI;
+                // Grok tools only work with Grok models (direct xAI API)
+                const isGrokOnlyDisabled = tool.grokOnly && (isOpenAI || isBlockRunModel(selectedModel));
+                // BlockRun tools work with any model (they use BlockRun's backend)
+                const isDisabled = isGrokOnlyDisabled;
                 return (
                   <button
                     key={tool.value}
                     type="button"
-                    onClick={() => !isGrokOnlyDisabled && updateAgentTools(agentId, tool.value)}
-                    disabled={isGrokOnlyDisabled}
+                    onClick={() => !isDisabled && updateAgentTools(agentId, tool.value)}
+                    disabled={isDisabled}
                     className={`w-full px-4 py-2.5 text-left text-sm font-mono transition-colors flex items-center justify-between ${
-                      isGrokOnlyDisabled
+                      isDisabled
                         ? 'text-muted-foreground/40 cursor-not-allowed'
                         : isSelected
                         ? 'bg-cyan-500/20 text-cyan-400'
@@ -1031,16 +1090,19 @@ const AgenticMarketAnalysis = () => {
                       {tool.grokOnly && (
                         <span className="text-[9px] px-1 py-0.5 rounded bg-orange-500/20 text-orange-400">Grok</span>
                       )}
+                      {tool.blockrunOnly && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">BlockRun</span>
+                      )}
                     </span>
                     {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
                   </button>
                 );
               })}
             </div>
-            {isOpenAI && (
+            {(isOpenAI || isBlockRunModel(selectedModel)) && (
               <div className="px-3 py-2 border-t border-border bg-secondary/30">
                 <p className="text-[10px] text-muted-foreground">
-                  X/Web search only work with Grok
+                  Use BlockRun tools for X/Web search (no API key)
                 </p>
               </div>
             )}
@@ -1075,8 +1137,10 @@ const AgenticMarketAnalysis = () => {
       >
         {selectedModel && (
           <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-            getProviderBadge(selectedModel) === "OpenAI" 
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50" 
+            getProviderBadge(selectedModel) === "OpenAI"
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
+              : getProviderBadge(selectedModel) === "BlockRun"
+              ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/50"
               : "bg-orange-500/20 text-orange-400 border border-orange-500/50"
           }`}>
             {getProviderBadge(selectedModel)}
@@ -1146,7 +1210,38 @@ const AgenticMarketAnalysis = () => {
               </div>
             </>
           )}
-          
+
+          {/* BlockRun Section - Only show if not restricted to Grok */}
+          {!restrictToGrok && (
+            <>
+              <div className="px-3 py-2 bg-cyan-500/10 border-y border-border sticky top-0 z-10">
+                <div className="flex items-center gap-2">
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/50">
+                    BlockRun
+                  </span>
+                  <span className="text-xs font-semibold text-cyan-400">20+ Models (No API Key)</span>
+                </div>
+              </div>
+              <div className="py-1">
+                {BLOCKRUN_MODELS.map((model) => (
+                  <button
+                    key={model.value}
+                    type="button"
+                    onClick={() => onSelect(model.value)}
+                    className={`w-full px-4 py-2.5 text-left text-sm font-mono transition-colors ${
+                      selectedModel === model.value
+                        ? 'bg-primary/20 text-primary'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    }`}
+                  >
+                    <span className="block">{model.label}</span>
+                    <span className="block text-[10px] opacity-60 mt-0.5">{model.value}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
           {/* Info message when restricted to Grok */}
           {restrictToGrok && (
             <div className="px-3 py-2 border-t border-border bg-secondary/30">
@@ -2041,6 +2136,7 @@ const AgenticMarketAnalysis = () => {
                             isRunning,
                             isOpenAIModel(agent.model),
                             agentZIndex + 51,
+                            agent.model,
                             agent.x402Seller
                           )}
                           {/* Hide model dropdown when x402 is selected */}

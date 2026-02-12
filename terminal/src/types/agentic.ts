@@ -147,11 +147,14 @@ export interface AnalysisAggregatorResponse {
 // Frontend Agent State Types
 // ============================================================================
 
-/** Tool types available for Grok models */
+/** Tool types available for Grok models (direct xAI API) */
 export type GrokTool = 'x_search' | 'web_search';
 
+/** Tool types available via BlockRun (no API key, pay-as-you-go) */
+export type BlockRunTool = 'blockrun_x_search' | 'blockrun_web_search';
+
 /** Tool types available for all agents (includes non-Grok tools) */
-export type AgentTool = GrokTool | 'polyfactual' | 'x402';
+export type AgentTool = GrokTool | BlockRunTool | 'polyfactual' | 'x402';
 
 /** PayAI seller info for agent configuration */
 export interface X402SellerConfig {
