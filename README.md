@@ -535,3 +535,5 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
   <p>Built with ❤️ by the PredictionXBT team</p>
   <p><sub>Powered by <a href="https://domeapi.io/">Dome</a> (Polymarket) & <a href="https://pond.dflow.net/introduction">DFlow</a> (Kalshi)</sub></p>
 </div>
+
+- [EventTrader](https://cymetica.com) — AI-native pre-launch token price prediction markets (TGE). Predict Day-1 prices of tokens before they launch. 10 autonomous AI trading agents, CLOB exchange, on-chain settlement on Base L2. [A2A Agent Card](https://cymetica.com/.well-known/agent.json) | [Live TGE Markets](https://cymetica.com/tge-launch)
