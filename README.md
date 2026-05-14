@@ -100,7 +100,7 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 ### Key Features
 
 - **Multi-Model Support** — Mix and match xAI Grok (4.1, 4) and OpenAI GPT (5.2, 5.1, 4.1) models
-- **Tool-Augmented Analysis** — Agents can use X (Twitter) search, Web search, Polyfactual deep research, and x402/PayAI sellers
+- **Tool-Augmented Analysis** — Agents can use X (Twitter) search, Web search, Polyfactual deep research, x402/PayAI sellers, and a **Pay.sh** terminal playbook for wallet-approved paid HTTP (402 / MPP)
 - **Custom Commands** — Direct agent focus with natural language instructions
 - **Real-Time Pipeline Visualization** — Watch agents work through the analysis pipeline
 - **Consensus Metrics** — See how agents agree or disagree on recommendations
@@ -118,6 +118,7 @@ Predict Super Intelligence operates through a sophisticated **agent pipeline**:
 | **⚖️ Arbitrage Intelligence** | ✅ Released | AI-powered cross-platform arbitrage detection between Polymarket and Kalshi. Paste any market URL, and the system automatically searches for the same market on the other platform, compares prices, and provides actionable arbitrage strategies with profit calculations. | [📖 Setup Guide](docs/features/arbitrage-intelligence.md) |
 | **🛡️ Verifiable Agents** | ✅ Released | Permanently store agent analysis on [Irys](https://irys.xyz/) blockchain for transparent, verifiable AI predictions. Supports both devnet (free, temporary) and mainnet (permanent). | [📖 Setup Guide](docs/features/verifiable-agents.md) |
 | **💸 x402 / PayAI Integration** | ✅ Released | Access paid AI services and data providers through the x402 protocol. Browse the PayAI bazaar, select sellers, and pay with USDC on Solana or Base. Use as a tool in your Predict Agents. | [📖 Setup Guide](docs/features/x402-integration.md) |
+| **🔐 Pay.sh (HTTP agents)** | ✅ Released | Official `pay` CLI for wallet-approved HTTP 402 / MPP: sandbox recipes, Market Analysis playbook with copy-paste commands, and `examples/pay-sh` for headless agent hosts. Complements server-side x402. | [📖 Setup Guide](docs/features/pay-sh-integration.md) |
 | **Betting Bots** | ✅ Released | Polymarket 15 Minute Up/Down Arbitrage Bot — **Vanilla Mode** (single price straddle) and **Ladder Mode** (multi-level tapered allocation for maximized fill rates) | [📖 Setup Guide](docs/features/betting-bots.md) |
 | **Wallet Tracking** | ✅ Released | Real-time order tracking for any Polymarket wallets using Dome SDK WebSockets — 10 seconds faster than hosted bots | [📖 Setup Guide](docs/features/wallet-tracking.md) |
 
@@ -150,6 +151,8 @@ PredictOS uses specialized data providers for each prediction market platform:
 
 ```
 PredictOS/
+├── examples/
+│   └── pay-sh/                      # Pay.sh CLI recipes (sandbox + notes)
 ├── terminal/                        # Frontend (Next.js 14)
 │   ├── src/
 │   │   ├── app/                     # Next.js App Router
@@ -170,6 +173,7 @@ PredictOS/
 │   │   │   └── wallet-tracking/     # Wallet Tracking UI
 │   │   ├── components/              # React components
 │   │   │   ├── AgenticMarketAnalysis.tsx   # Super Intelligence component
+│   │   │   ├── PayShAgentPlaybook.tsx      # Pay.sh CLI hints (Market Analysis)
 │   │   │   ├── ArbitrageTerminal.tsx       # Arbitrage Intelligence component
 │   │   │   ├── BettingBotTerminal.tsx
 │   │   │   └── WalletTrackingTerminal.tsx
@@ -245,6 +249,7 @@ Edit `.env.local` with the credentials required for the features you want to use
 > - **Super Intelligence:** [docs/features/super-intelligence.md](docs/features/super-intelligence.md) — requires `DOME_API_KEY` (Polymarket) + `DFLOW_API_KEY` (Kalshi) + AI provider keys (`XAI_API_KEY` and/or `OPENAI_API_KEY`). Optional: `POLYFACTUAL_API_KEY` for Polyfactual tool. For Autonomous mode: `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`.
 > - **Betting Bots:** [docs/features/betting-bots.md](docs/features/betting-bots.md) — requires `POLYMARKET_WALLET_PRIVATE_KEY` + `POLYMARKET_PROXY_WALLET_ADDRESS`
 > - **Wallet Tracking:** [docs/features/wallet-tracking.md](docs/features/wallet-tracking.md) — requires `DOME_API_KEY` (frontend only, no Supabase needed)
+> - **Pay.sh (CLI):** [docs/features/pay-sh-integration.md](docs/features/pay-sh-integration.md) — optional; install `pay` on your machine, use [examples/pay-sh/](examples/pay-sh/) for sandbox recipes. No Supabase secrets required.
 
 Example for Super Intelligence (full setup):
 
@@ -347,6 +352,7 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
 - [OpenAI GPT](https://openai.com/) — OpenAI's language models (GPT-4.1, GPT-5)
 - [Irys](https://irys.xyz/) — Permanent blockchain storage for Verifiable Agents
 - [x402 / PayAI](https://www.payai.network/) — HTTP 402 payment protocol for paid AI services
+- [Pay.sh](https://pay.sh/docs) — CLI payment layer for HTTP agents (402 / MPP, local wallet approval)
 
 ## 🤝 Partners and Collaborators
 
@@ -428,6 +434,19 @@ Your PredictOS terminal will be running at [http://localhost:3000](http://localh
       <p><strong>The HTTP 402 payment protocol for AI agents.</strong> PayAI enables seamless machine-to-machine payments using the x402 protocol, allowing AI agents to pay for API calls and services automatically with USDC on Solana or Base.</p>
       <p>🔗 PredictOS integrates PayAI to power the <strong>x402 Tool</strong> in Super Intelligence — enabling agents to discover and call paid AI services from the PayAI bazaar with automatic payment handling. Browse sellers, select services, and let your agents pay for premium data and analysis.</p>
       <p><a href="https://www.payai.network/">🌐 Website</a> · <a href="https://docs.payai.network/">📖 Docs</a> · <a href="https://x.com/PayAINetwork">𝕏 Twitter</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="120" align="center">
+      <a href="https://pay.sh/docs">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:12px;background:linear-gradient(135deg,#f59e0b18,#10b98118);border:1px solid rgba(245,158,11,0.35);font-family:ui-monospace,monospace;font-size:15px;font-weight:700;color:#fbbf24;">pay</span>
+      </a>
+    </td>
+    <td>
+      <h3><a href="https://pay.sh/docs">Pay.sh</a></h3>
+      <p><strong>Agent-first payments for HTTP 402 and MPP.</strong> The <code>pay</code> CLI wraps curl and coding-agent flows, surfaces payment challenges, and retries with proofs after the <strong>local wallet</strong> approves — ideal when you do not want private keys on a server.</p>
+      <p>🔗 PredictOS documents and surfaces Pay.sh alongside x402: an in-terminal <strong>playbook</strong> on Market Analysis, <a href="examples/pay-sh/README.md">examples/pay-sh</a> recipes, and the <a href="docs/features/pay-sh-integration.md">pay-sh-integration</a> guide for combining paid HTTP calls with Super Intelligence.</p>
+      <p><a href="https://pay.sh/docs">📖 Docs</a> · <a href="https://pay.sh/docs/cli">⌨️ CLI</a> · <a href="https://pay.sh/docs/protocol">🔌 Protocol</a></p>
     </td>
   </tr>
   <tr>

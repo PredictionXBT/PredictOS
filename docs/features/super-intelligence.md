@@ -394,6 +394,8 @@ Each agent needs a model selected:
 | **X Search** | Grok only | Search X (Twitter) for real-time social sentiment |
 | **Web Search** | Grok only | Search the web for news and information |
 | **PolyFactual Research** | All models | Deep research with citations |
+| **PayAI sellers (x402)** | PayAI / CDP facilitator | Paid HTTP sellers from the bazaar; USDC on Solana or Base (server-side keys in Supabase). See [x402-integration.md](./x402-integration.md). |
+| **Pay.sh (CLI)** | Local `pay` binary | Wallet-approved HTTP 402 / MPP outside the browser. Use the in-app playbook on Market Analysis or follow [pay-sh-integration.md](./pay-sh-integration.md). |
 
 > 💡 **Tip:** X Search and Web Search only work with Grok models. If you select these tools with an OpenAI model, the model will automatically switch to Grok.
 
@@ -453,7 +455,7 @@ flowchart TB
         
         subgraph CONFIG["Configuration"]
             MODEL["🧠 Model Selection<br/><small>Grok 4.1 / GPT-5.2 / etc.</small>"]
-            TOOLS["🔧 Tools<br/><small>X Search • Web • Polyfactual</small>"]
+            TOOLS["🔧 Tools<br/><small>X Search • Web • Polyfactual • x402 • Pay.sh CLI</small>"]
             CMD["💬 Custom Command<br/><small>Natural language focus</small>"]
         end
         

@@ -51,6 +51,7 @@ import { generateRequestId, formatCombinedAnalysisForUpload, type IrysUploadResu
 import type { PolyfactualResearchResponse } from "@/types/polyfactual";
 import AnalysisOutput from "./AnalysisOutput";
 import AggregatedAnalysisOutput from "./AggregatedAnalysisOutput";
+import PayShAgentPlaybook from "./PayShAgentPlaybook";
 
 // Model types
 type AIModel = string;
@@ -1683,6 +1684,14 @@ const AgenticMarketAnalysis = () => {
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="px-4 pb-2">
+            <PayShAgentPlaybook
+              marketUrl={url}
+              eventIdentifier={eventData?.eventIdentifier}
+              pmType={eventData?.pmType}
+            />
           </div>
 
           {/* Agent Configuration Section */}
