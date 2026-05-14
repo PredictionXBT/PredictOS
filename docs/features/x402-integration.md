@@ -2,6 +2,8 @@
 
 **x402 Integration** brings the power of paid AI services and data providers to PredictOS through the [x402 protocol](https://www.x402.org/). Discover and call x402-protected endpoints with automatic USDC payments on Solana or Base networks.
 
+> **Related:** For **wallet-approved** HTTP 402 / MPP calls from your own terminal or coding agents (instead of server-side keys), see **[Pay.sh integration](pay-sh-integration.md)** and [pay.sh/docs](https://pay.sh/docs).
+
 > ✅ **Status: Fully Integrated**
 > 
 > x402 integration is complete and production-ready. PredictOS supports both **PayAI** and **Coinbase CDP** facilitators interchangeably — simply configure your preferred facilitator URL in the environment variables.

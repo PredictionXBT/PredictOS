@@ -177,6 +177,12 @@ After setting up your environment variables:
 | "Rate limit exceeded" | Wait a few minutes or upgrade your API plan |
 | "Query exceeds maximum length" | Polyfactual queries must be under 1,000 characters |
 
+## See also
+
+- **[Super Intelligence](super-intelligence.md)** — multi-agent pipeline on the same Market Analysis route
+- **[x402 / PayAI](x402-integration.md)** — paid sellers from the browser-backed Edge stack
+- **[Pay.sh](pay-sh-integration.md)** — wallet-approved HTTP 402 / MPP from your terminal (`pay` CLI + in-app playbook)
+
 ---
 
 ← [Back to main README](../../README.md)
