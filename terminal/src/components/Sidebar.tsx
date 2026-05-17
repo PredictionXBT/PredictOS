@@ -17,7 +17,8 @@ import {
   ArrowLeftRight,
   Coins,
   TrendingUp,
-  Eye
+  Eye,
+  Bell
 } from "lucide-react";
 
 interface SidebarProps {
@@ -27,6 +28,7 @@ interface SidebarProps {
 const navItems = [
   { id: "analysis", label: "Predict Super Intelligence", icon: BarChart3, available: true, href: "/market-analysis" },
   { id: "arbitrage", label: "Arbitrage Intelligence", icon: ArrowLeftRight, available: true, href: "/arbitrage" },
+  { id: "tge-monitor", label: "TGE Monitor", icon: Bell, available: true, href: "/tge-monitor" },
   { id: "betting-bots", label: "Betting Bots", icon: Bot, available: true, href: "/betting-bots" },
   { id: "wallet-tracking", label: "Wallet Tracking", icon: Eye, available: true, href: "/wallet-tracking" },
   { id: "no-code-builder", label: "No Code Builder", icon: Wand2, available: false },
